@@ -1,0 +1,23 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /source
+
+COPY NuGet.Config ./
+COPY src/ClearlySaid.Shared/ClearlySaid.Shared.csproj src/ClearlySaid.Shared/
+COPY src/ClearlySaid.Web/ClearlySaid.Web.csproj src/ClearlySaid.Web/
+RUN dotnet restore src/ClearlySaid.Web/ClearlySaid.Web.csproj --configfile NuGet.Config
+
+COPY src/ClearlySaid.Shared/ src/ClearlySaid.Shared/
+COPY src/ClearlySaid.Web/ src/ClearlySaid.Web/
+RUN dotnet publish src/ClearlySaid.Web/ClearlySaid.Web.csproj \
+    --configuration Release \
+    --no-restore \
+    --output /app/publish
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:8080 \
+    ASPNETCORE_ENVIRONMENT=Production \
+    DataProtection__KeysPath=/var/lib/clearlysaid/keys
+EXPOSE 8080
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "ClearlySaid.Web.dll"]

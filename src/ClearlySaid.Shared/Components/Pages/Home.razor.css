@@ -1,0 +1,223 @@
+.cs-page {
+    width: min(100% - 2rem, 44rem);
+    margin: 0 auto;
+    padding: max(2rem, env(safe-area-inset-top)) 0 max(2rem, env(safe-area-inset-bottom));
+}
+
+.cs-brand { margin-bottom: 1.5rem; }
+
+.cs-brand h1 {
+    margin: 0;
+    color: #171a2b;
+    font-size: clamp(2rem, 7vw, 2.75rem);
+    letter-spacing: -.04em;
+}
+
+.cs-brand p {
+    margin: .35rem 0 0;
+    color: #656b85;
+    font-size: 1rem;
+}
+
+.cs-compose,
+.cs-result,
+.cs-account {
+    border-radius: 1.25rem;
+    padding: 1.25rem;
+}
+
+.cs-account {
+    display: grid;
+    gap: .7rem;
+    margin-bottom: 1rem;
+    border: 1px solid #e5e7f0;
+    background: #fff;
+}
+
+.cs-account h2,
+.cs-account p { margin: 0; }
+
+.cs-account p,
+.cs-account small,
+.cs-account-summary span { color: #656b85; }
+
+.cs-account label { font-size: .85rem; font-weight: 700; }
+
+.cs-account input {
+    min-height: 3rem;
+    border: 1px solid #d7daea;
+    border-radius: .75rem;
+    padding: .65rem .8rem;
+    background: #fff;
+    color: #171a2b;
+    font: inherit;
+}
+
+.cs-link-button {
+    border: 0;
+    padding: .4rem;
+    background: transparent;
+    color: #4c55c8;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+}
+
+.cs-account-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid #e5e7f0;
+    border-radius: 1rem;
+    padding: .85rem 1rem;
+    background: #fff;
+}
+
+.cs-account-summary div { display: grid; gap: .15rem; }
+.cs-account-summary span { font-size: .85rem; }
+
+.cs-compose {
+    border: 1px solid #e5e7f0;
+    background: #fff;
+    box-shadow: 0 .75rem 2.5rem rgb(36 42 80 / 7%);
+}
+
+.cs-compose-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.cs-compose h2,
+.cs-result h2 {
+    margin: 0;
+    font-size: .95rem;
+}
+
+.cs-listening {
+    color: #c93664;
+    font-size: .9rem;
+    font-weight: 700;
+}
+
+textarea {
+    width: 100%;
+    min-height: 10rem;
+    margin: .75rem 0 1rem;
+    resize: vertical;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: #171a2b;
+    font: inherit;
+    font-size: 1.05rem;
+    line-height: 1.5;
+}
+
+textarea::placeholder { color: #989cb0; }
+
+.cs-actions {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: .75rem;
+}
+
+.cs-button {
+    min-height: 3.25rem;
+    border: 0;
+    border-radius: .9rem;
+    padding: 0 1.15rem;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+}
+
+.cs-button:focus-visible {
+    outline: 3px solid #9298ff;
+    outline-offset: 2px;
+}
+
+.cs-button:disabled {
+    cursor: wait;
+    opacity: .65;
+}
+
+.cs-button-primary {
+    background: #5865e8;
+    color: #fff;
+}
+
+.cs-button-secondary {
+    background: #eef0ff;
+    color: #4c55c8;
+}
+
+.cs-result {
+    margin-top: 1rem;
+    background: #171a2b;
+    color: #fff;
+}
+
+.cs-result h2 { color: #aeb5ff; }
+
+.cs-result p {
+    margin: .8rem 0 1rem;
+    font-size: 1.1rem;
+    line-height: 1.55;
+}
+
+.cs-button-copy {
+    width: 100%;
+    background: #303553;
+    color: #fff;
+}
+
+.cs-error {
+    margin: 1rem .25rem 0;
+    color: #b42318;
+}
+
+.cs-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+}
+
+@media (max-width: 34rem) {
+    .cs-actions { grid-template-columns: 1fr; }
+}
+
+@media (prefers-color-scheme: dark) {
+    .cs-brand h1,
+    textarea { color: #f5f6ff; }
+
+    .cs-brand p { color: #a9aec5; }
+
+    .cs-compose {
+        border-color: #30344a;
+        background: #1a1d2c;
+        box-shadow: 0 .75rem 2.5rem rgb(0 0 0 / 20%);
+    }
+
+    .cs-account,
+    .cs-account-summary {
+        border-color: #30344a;
+        background: #1a1d2c;
+        color: #f5f6ff;
+    }
+
+    .cs-account input {
+        border-color: #40455f;
+        background: #10121c;
+        color: #f5f6ff;
+    }
+
+    textarea::placeholder { color: #7f849b; }
+    .cs-error { color: #ff9c92; }
+}

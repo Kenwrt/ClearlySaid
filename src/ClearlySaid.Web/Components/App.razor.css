@@ -1,0 +1,73 @@
+.test-download {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    max-width: 760px;
+    margin: 0 auto 2rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid #d8dcf0;
+    border-radius: 16px;
+    background: #ffffff;
+    color: #20243a;
+    box-shadow: 0 8px 24px rgb(27 36 75 / 8%);
+}
+
+.test-download div {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.test-download span {
+    color: #5e6379;
+}
+
+.test-download a {
+    flex: 0 0 auto;
+    padding: 0.7rem 1rem;
+    border-radius: 10px;
+    background: #5548d9;
+    color: #ffffff;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.test-download a:hover {
+    background: #4538c1;
+}
+
+.site-footer {
+    display: flex;
+    justify-content: center;
+    gap: 1.25rem;
+    margin: 0 auto 2rem;
+    font-size: .9rem;
+}
+
+.site-footer a { color: #4c55c8; }
+
+@media (max-width: 640px) {
+    .test-download {
+        align-items: stretch;
+        flex-direction: column;
+        margin: 0 1rem 1.5rem;
+    }
+
+    .test-download a {
+        text-align: center;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    .test-download {
+        border-color: #363b58;
+        background: #191c2b;
+        color: #f2f3fb;
+    }
+
+    .test-download span {
+        color: #b6bbce;
+    }
+
+    .site-footer a { color: #aeb5ff; }
+}

@@ -1,0 +1,9 @@
+.cs-shell {
+    min-height: 100%;
+}
+
+.cs-not-found {
+    max-width: 42rem;
+    margin: 4rem auto;
+    padding: 1.5rem;
+}

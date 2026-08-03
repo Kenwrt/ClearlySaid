@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+.git/
+.vs/
+.idea/
+.deployment-secrets/
+.dotnet-cli/
+.nuget-packages/
+artifacts/
+ClearlySaid-WrightServer.zip
+src/ClearlySaid.App/

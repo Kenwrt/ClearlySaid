@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <link rel="stylesheet" href="_content/ClearlySaid.Shared/clearlysaid.css" />
+    <link rel="stylesheet" href="@Assets["ClearlySaid.Web.styles.css"]" />
+    <ImportMap />
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+
+<body>
+    <ClearlySaid.Shared.Components.Routes @rendermode="InteractiveServer" />
+    <aside class="test-download" aria-label="Android testing download">
+        <div>
+            <strong>Testing ClearlySaid on Android?</strong>
+            <span>Install the private test build directly on your device.</span>
+        </div>
+        <a href="/downloads/ClearlySaid-Android-Test.apk" download>Download Android test app</a>
+    </aside>
+    <footer class="site-footer">
+        <a href="/privacy">Privacy</a>
+        <a href="/account/delete">Delete account</a>
+        <a href="mailto:support@healthcareautomation.services">Support</a>
+    </footer>
+    <script src="_content/ClearlySaid.Shared/clearlysaid.js"></script>
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+</body>
+
+</html>

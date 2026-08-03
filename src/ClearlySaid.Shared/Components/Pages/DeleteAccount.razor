@@ -1,0 +1,62 @@
+@page "/account/delete"
+@inject IAccountService AccountService
+
+<PageTitle>Delete account - ClearlySaid</PageTitle>
+
+<main class="cs-legal">
+    <h1>Delete your ClearlySaid account</h1>
+    @if (deleted)
+    {
+        <p>Your account has been disabled, identifying account data has been anonymized, and all sessions have been revoked.</p>
+        <p><a href="/">Return to ClearlySaid</a></p>
+    }
+    else if (AccountService.CurrentAccount is null)
+    {
+        <p>Sign in from the ClearlySaid home page, then return here to delete your account.</p>
+        <p><a href="/">Sign in</a></p>
+    }
+    else
+    {
+        <p>This permanently disables <strong>@AccountService.CurrentAccount.Email</strong>, anonymizes its identity, and revokes all sessions. Active Google Play subscriptions must also be cancelled in Google Play.</p>
+        <label><input type="checkbox" @bind="confirmed" /> I understand that this cannot be undone.</label>
+        <p><button class="cs-danger-button" disabled="@(!confirmed || busy)" @onclick="DeleteAsync">Delete my account</button></p>
+        @if (!string.IsNullOrWhiteSpace(error))
+        {
+            <p class="cs-error">@error</p>
+        }
+    }
+</main>
+
+@code {
+    private bool confirmed;
+    private bool busy;
+    private bool deleted;
+    private string error = string.Empty;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await AccountService.InitializeAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        try
+        {
+            busy = true;
+            await AccountService.DeleteAccountAsync();
+            deleted = true;
+        }
+        catch (Exception exception)
+        {
+            error = exception.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

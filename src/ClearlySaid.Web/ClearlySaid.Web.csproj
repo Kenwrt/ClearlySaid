@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <ClearlySaidTargetFramework Condition="'$(ClearlySaidTargetFramework)' == ''">net10.0</ClearlySaidTargetFramework>
+    <TargetFramework>$(ClearlySaidTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
+    <NpgsqlVersion Condition="'$(NpgsqlVersion)' == ''">10.0.0</NpgsqlVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ClearlySaid.Shared\ClearlySaid.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="$(NpgsqlVersion)" />
+  </ItemGroup>
+
+</Project>

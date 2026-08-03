@@ -1,0 +1,50 @@
+:root {
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color-scheme: light dark;
+    background: #f7f8fc;
+}
+
+html,
+body,
+#app {
+    min-height: 100%;
+    margin: 0;
+}
+
+body { background: #f7f8fc; }
+
+button,
+textarea,
+input { box-sizing: border-box; }
+
+.cs-legal {
+    width: min(100% - 2rem, 48rem);
+    margin: 0 auto;
+    padding: 2rem 0;
+    color: #171a2b;
+    line-height: 1.6;
+}
+
+.cs-legal h1 { line-height: 1.15; }
+.cs-legal a { color: #4c55c8; }
+
+.cs-danger-button {
+    min-height: 3rem;
+    border: 0;
+    border-radius: .75rem;
+    padding: 0 1rem;
+    background: #b42318;
+    color: #fff;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+}
+
+.cs-danger-button:disabled { cursor: not-allowed; opacity: .55; }
+
+@media (prefers-color-scheme: dark) {
+    :root,
+    body { background: #10121c; }
+    .cs-legal { color: #f5f6ff; }
+    .cs-legal a { color: #aeb5ff; }
+}

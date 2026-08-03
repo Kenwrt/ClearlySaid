@@ -1,0 +1,294 @@
+@page "/"
+@implements IDisposable
+@inject IMessageRefinementService RefinementService
+@inject IAccountService AccountService
+@inject IDictationService DictationService
+@inject IJSRuntime JS
+
+<PageTitle>ClearlySaid</PageTitle>
+
+<main class="cs-page">
+    <header class="cs-brand">
+        <h1>ClearlySaid</h1>
+        <p>Say it naturally. Send it clearly.</p>
+    </header>
+
+    @if (!AccountService.IsInitialized)
+    {
+        <section class="cs-account"><p>Loading your accountâ€¦</p></section>
+    }
+    else if (AccountService.CurrentAccount is null)
+    {
+        <section class="cs-account" aria-labelledby="account-heading">
+            <h2 id="account-heading">@(showRegistration ? "Create your account" : "Sign in")</h2>
+            <p>Your account protects the service and keeps track of your monthly allowance.</p>
+            <label for="account-email">Email</label>
+            <input id="account-email" type="email" autocomplete="email" @bind="email" />
+            <label for="account-password">Password</label>
+            <input id="account-password"
+                   type="password"
+                   autocomplete="@(showRegistration ? "new-password" : "current-password")"
+                   @bind="password" />
+            @if (showRegistration)
+            {
+                <small>Use at least 12 characters with uppercase, lowercase, and a number.</small>
+            }
+            <button class="cs-button cs-button-primary" type="button" disabled="@isAccountBusy" @onclick="SubmitAccountAsync">
+                @(isAccountBusy ? "Please waitâ€¦" : showRegistration ? "Create account" : "Sign in")
+            </button>
+            <button class="cs-link-button" type="button" @onclick="ToggleAccountMode">
+                @(showRegistration ? "Already have an account? Sign in" : "New to ClearlySaid? Create an account")
+            </button>
+        </section>
+    }
+    else
+    {
+        <section class="cs-account-summary" aria-label="Account and usage">
+            <div>
+                <strong>@AccountService.CurrentAccount.Email</strong>
+                <span>@AccountService.CurrentAccount.Plan plan · @AccountService.CurrentAccount.Remaining of @AccountService.CurrentAccount.MonthlyAllowance messages remaining</span>
+            </div>
+            <button class="cs-link-button" type="button" @onclick="LogoutAsync">Sign out</button>
+        </section>
+    }
+
+    <section class="cs-compose" aria-labelledby="your-words-heading" aria-disabled="@(AccountService.CurrentAccount is null)">
+        <div class="cs-compose-heading">
+            <h2 id="your-words-heading">Your words</h2>
+            @if (isListening)
+            {
+                <span class="cs-listening" role="status">Listening…</span>
+            }
+        </div>
+
+        <label class="cs-sr-only" for="message-input">Your dictated or typed message</label>
+        <textarea id="message-input"
+                  maxlength="5000"
+                  placeholder="Tap the microphone and start speaking, or type here…"
+                  @bind="message"
+                  @bind:event="oninput"></textarea>
+
+        <div class="cs-actions">
+            <button class="cs-button cs-button-secondary"
+                    type="button"
+                    disabled="@(isBusy || AccountService.CurrentAccount is null)"
+                    @onclick="ToggleDictationAsync">
+                <span aria-hidden="true">@(isListening ? "■" : "🎙")</span>
+                @(isListening ? "Stop" : "Dictate")
+            </button>
+            <button class="cs-button cs-button-primary"
+                    type="button"
+                    disabled="@(isBusy || AccountService.CurrentAccount is null)"
+                    @onclick="RefineAsync">
+                @(isBusy ? "Improving…" : "Make it clear")
+            </button>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(result))
+    {
+        <section class="cs-result" aria-live="polite" aria-labelledby="clear-version-heading">
+            <h2 id="clear-version-heading">Clear version</h2>
+            <p>@result</p>
+            <button class="cs-button cs-button-copy" type="button" @onclick="CopyAsync">
+                @(copied ? "Copied" : "Copy message")
+            </button>
+        </section>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <p class="cs-error" role="alert">@errorMessage</p>
+    }
+</main>
+
+@code {
+    private string message = string.Empty;
+    private string result = string.Empty;
+    private string errorMessage = string.Empty;
+    private bool isListening;
+    private bool isBusy;
+    private bool copied;
+    private bool showRegistration;
+    private bool isAccountBusy;
+    private string email = string.Empty;
+    private string password = string.Empty;
+    private CancellationTokenSource? operationCancellation;
+
+    protected override void OnInitialized()
+    {
+        DictationService.TranscriptChanged += OnTranscriptChanged;
+        DictationService.ListeningStopped += OnListeningStopped;
+        DictationService.Error += OnDictationError;
+        AccountService.AccountChanged += OnAccountChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            await AccountService.InitializeAsync();
+        }
+        catch (Exception exception)
+        {
+            errorMessage = exception.Message;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task SubmitAccountAsync()
+    {
+        try
+        {
+            isAccountBusy = true;
+            errorMessage = string.Empty;
+            if (showRegistration)
+            {
+                await AccountService.RegisterAsync(email, password);
+            }
+            else
+            {
+                await AccountService.LoginAsync(email, password);
+            }
+
+            password = string.Empty;
+        }
+        catch (Exception exception)
+        {
+            errorMessage = exception.Message;
+        }
+        finally
+        {
+            isAccountBusy = false;
+        }
+    }
+
+    private void ToggleAccountMode()
+    {
+        showRegistration = !showRegistration;
+        password = string.Empty;
+        errorMessage = string.Empty;
+    }
+
+    private async Task LogoutAsync()
+    {
+        await AccountService.LogoutAsync();
+        result = string.Empty;
+    }
+
+    private void OnAccountChanged(object? sender, EventArgs e) =>
+        _ = InvokeAsync(StateHasChanged);
+
+    private async Task ToggleDictationAsync()
+    {
+        errorMessage = string.Empty;
+
+        if (!DictationService.IsSupported)
+        {
+            errorMessage = "Speech recognition isn't available on this device or browser.";
+            return;
+        }
+
+        try
+        {
+            if (isListening)
+            {
+                await DictationService.StopAsync();
+            }
+            else
+            {
+                result = string.Empty;
+                await DictationService.StartAsync();
+                isListening = true;
+            }
+        }
+        catch (Exception exception)
+        {
+            isListening = false;
+            errorMessage = $"Dictation couldn't start: {exception.Message}";
+        }
+    }
+
+    private async Task RefineAsync()
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            errorMessage = "Dictate or type a message first.";
+            return;
+        }
+
+        operationCancellation?.Cancel();
+        operationCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        try
+        {
+            isBusy = true;
+            copied = false;
+            errorMessage = string.Empty;
+            result = string.Empty;
+            result = await RefinementService.RefineAsync(message.Trim(), operationCancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            errorMessage = "The request timed out. Please try again.";
+        }
+        catch (Exception exception)
+        {
+            errorMessage = exception.Message;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task CopyAsync()
+    {
+        await JS.InvokeVoidAsync("clearlySaid.copyText", result);
+        copied = true;
+    }
+
+    private void OnTranscriptChanged(object? sender, string transcript)
+    {
+        _ = InvokeAsync(() =>
+        {
+            message = transcript;
+            StateHasChanged();
+        });
+    }
+
+    private void OnListeningStopped(object? sender, EventArgs e)
+    {
+        _ = InvokeAsync(() =>
+        {
+            isListening = false;
+            StateHasChanged();
+        });
+    }
+
+    private void OnDictationError(object? sender, string error)
+    {
+        _ = InvokeAsync(() =>
+        {
+            isListening = false;
+            errorMessage = error;
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        operationCancellation?.Cancel();
+        operationCancellation?.Dispose();
+        DictationService.TranscriptChanged -= OnTranscriptChanged;
+        DictationService.ListeningStopped -= OnListeningStopped;
+        DictationService.Error -= OnDictationError;
+        AccountService.AccountChanged -= OnAccountChanged;
+    }
+}

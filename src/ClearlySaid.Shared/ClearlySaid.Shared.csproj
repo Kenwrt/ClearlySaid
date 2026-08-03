@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <ClearlySaidTargetFramework Condition="'$(ClearlySaidTargetFramework)' == ''">net10.0</ClearlySaidTargetFramework>
+    <TargetFramework>$(ClearlySaidTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AspNetVersion Condition="'$(AspNetVersion)' == ''">10.0.10</AspNetVersion>
+  </PropertyGroup>
+
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="$(AspNetVersion)" />
+  </ItemGroup>
+
+</Project>
