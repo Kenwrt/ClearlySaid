@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClearlySaid – AI Text Converter</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>ClearlySaid</h1>
+      <p class="tagline">Transform your text with AI</p>
+    </header>
+
+    <main>
+      <div class="card">
+        <div class="form-group">
+          <label for="mode">Conversion Mode</label>
+          <select id="mode">
+            <option value="simplify">Simplify</option>
+            <option value="formal">Make Formal</option>
+            <option value="casual">Make Casual</option>
+            <option value="summarize">Summarize</option>
+            <option value="expand">Expand</option>
+            <option value="fix-grammar">Fix Grammar</option>
+          </select>
+        </div>
+
+        <div class="panels">
+          <div class="panel">
+            <label for="inputText">Input Text</label>
+            <textarea id="inputText" placeholder="Paste or type your text here…" maxlength="5000"></textarea>
+            <div class="char-count"><span id="charCount">0</span> / 5000</div>
+          </div>
+
+          <div class="arrow">&#8594;</div>
+
+          <div class="panel">
+            <label for="outputText">Converted Text</label>
+            <textarea id="outputText" readonly placeholder="Result will appear here…"></textarea>
+            <button id="copyBtn" class="copy-btn" title="Copy result">Copy</button>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="convertBtn">Convert</button>
+        </div>
+
+        <div id="error" class="error hidden"></div>
+        <div id="loading" class="loading hidden">Converting…</div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

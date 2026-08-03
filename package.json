@@ -1,0 +1,23 @@
+{
+  "name": "clearlysaid",
+  "version": "1.0.0",
+  "description": "Simple AI application for converting text",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test tests/api.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://localhost:26831/Kenwrt/ClearlySaid"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "openai": "^7.4.0"
+  }
+}
