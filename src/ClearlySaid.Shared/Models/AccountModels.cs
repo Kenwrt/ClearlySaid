@@ -12,9 +12,16 @@ public sealed record AccountInfo(
     string Plan,
     int MonthlyAllowance,
     int UsedThisPeriod,
-    DateTimeOffset PeriodEndsAt)
+    DateTimeOffset PeriodEndsAt,
+    string Role = "User")
 {
     public int Remaining => Math.Max(0, MonthlyAllowance - UsedThisPeriod);
+}
+
+public static class AccountRoles
+{
+    public const string User = "User";
+    public const string Admin = "Admin";
 }
 
 public sealed record GooglePurchaseVerificationRequest(

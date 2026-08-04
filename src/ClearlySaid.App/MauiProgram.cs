@@ -32,6 +32,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<ClearlySaidApiClient>();
         builder.Services.AddSingleton<IAccountService>(services => services.GetRequiredService<ClearlySaidApiClient>());
         builder.Services.AddSingleton<IMessageRefinementService>(services => services.GetRequiredService<ClearlySaidApiClient>());
+        builder.Services.AddSingleton<IAdminService>(services => services.GetRequiredService<ClearlySaidApiClient>());
         builder.Services.AddSingleton<MainPage>();
 
 #if DEBUG

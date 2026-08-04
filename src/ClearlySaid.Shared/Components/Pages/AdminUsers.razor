@@ -1,0 +1,85 @@
+@page "/admin/users"
+@inject IAccountService AccountService
+@inject IAdminService AdminService
+
+<PageTitle>Users - ClearlySaid Admin</PageTitle>
+
+<main class="cs-admin-page">
+    <header class="cs-admin-header"><div><h1>User administration</h1><p>Role, entitlement, status, and credential management.</p></div><a href="/admin">Admin console</a></header>
+    @if (!ready) { <p>Loading…</p> }
+    else if (AccountService.CurrentAccount?.Role != AccountRoles.Admin) { <section class="cs-admin-card"><h2>Access denied</h2></section> }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(error)) { <p class="cs-error" role="alert">@error</p> }
+        @if (!string.IsNullOrWhiteSpace(notice)) { <p class="cs-admin-notice" role="status">@notice</p> }
+
+        <section class="cs-admin-card">
+            <div class="cs-admin-section-heading"><h2>Accounts</h2><button class="cs-button cs-button-secondary" @onclick="LoadAsync" disabled="@busy">Refresh</button></div>
+            <div class="cs-admin-table-wrap"><table class="cs-admin-table">
+                <thead><tr><th>Email</th><th>Role</th><th>Plan</th><th>Usage</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var user in users)
+                    {
+                        <tr><td>@user.Email</td><td>@user.Role</td><td>@user.Plan</td><td>@user.UsedThisPeriod / @user.MonthlyAllowance</td><td>@(user.IsDisabled ? "Disabled" : "Active")</td><td><button class="cs-link-button" @onclick="() => Select(user)">Edit</button></td></tr>
+                    }
+                </tbody>
+            </table></div>
+        </section>
+
+        <section class="cs-admin-grid">
+            <div class="cs-admin-card">
+                <h2>Create user</h2>
+                <label>Email<input type="email" @bind="createEmail" /></label>
+                <label>Initial password<input type="password" autocomplete="new-password" @bind="createPassword" /></label>
+                <label>Role<select @bind="createRole"><option value="User">User</option><option value="Admin">Admin</option></select></label>
+                <label>Plan<input @bind="createPlan" /></label>
+                <label>Monthly allowance<input type="number" min="0" max="100000" @bind="createAllowance" /></label>
+                <button class="cs-button cs-button-primary" disabled="@busy" @onclick="CreateAsync">Create account</button>
+            </div>
+
+            @if (selectedId is not null)
+            {
+                <div class="cs-admin-card">
+                    <h2>Edit user</h2>
+                    <label>Email<input type="email" @bind="editEmail" /></label>
+                    <label>Role<select @bind="editRole"><option value="User">User</option><option value="Admin">Admin</option></select></label>
+                    <label>Plan<input @bind="editPlan" /></label>
+                    <label>Monthly allowance<input type="number" min="0" max="100000" @bind="editAllowance" /></label>
+                    <label class="cs-admin-check"><input type="checkbox" @bind="editDisabled" /> Disabled</label>
+                    <button class="cs-button cs-button-primary" disabled="@busy" @onclick="SaveAsync">Save changes</button>
+                    <hr />
+                    <label>New password<input type="password" autocomplete="new-password" @bind="resetPassword" /></label>
+                    <button class="cs-button cs-button-secondary" disabled="@busy" @onclick="ResetPasswordAsync">Reset password and revoke sessions</button>
+                    <label class="cs-admin-check"><input type="checkbox" @bind="confirmDelete" /> Confirm permanent anonymization</label>
+                    <button class="cs-danger-button" disabled="@(busy || !confirmDelete || selectedId == AccountService.CurrentAccount?.Id)" @onclick="DeleteAsync">Delete user</button>
+                </div>
+            }
+        </section>
+    }
+</main>
+
+@code {
+    private IReadOnlyList<AdminUser> users = [];
+    private bool ready, busy, editDisabled, confirmDelete;
+    private string error = "", notice = "", createEmail = "", createPassword = "", createRole = AccountRoles.User, createPlan = "free";
+    private int createAllowance = 20;
+    private Guid? selectedId;
+    private string editEmail = "", editRole = AccountRoles.User, editPlan = "free", resetPassword = "";
+    private int editAllowance;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await AccountService.InitializeAsync();
+        if (AccountService.CurrentAccount?.Role == AccountRoles.Admin) await LoadAsync();
+        ready = true; StateHasChanged();
+    }
+
+    private async Task LoadAsync() => await RunAsync(async () => users = await AdminService.GetUsersAsync(), "");
+    private void Select(AdminUser user) { selectedId=user.Id; editEmail=user.Email; editRole=user.Role; editPlan=user.Plan; editAllowance=user.MonthlyAllowance; editDisabled=user.IsDisabled; resetPassword=""; confirmDelete=false; error=notice=""; }
+    private async Task CreateAsync() => await RunAsync(async () => { await AdminService.CreateUserAsync(new(createEmail, createPassword, createRole, createPlan, createAllowance)); createEmail=createPassword=""; users=await AdminService.GetUsersAsync(); }, "User created.");
+    private async Task SaveAsync() { if (selectedId is null) return; await RunAsync(async () => { await AdminService.UpdateUserAsync(selectedId.Value, new(editEmail, editRole, editPlan, editAllowance, editDisabled)); users=await AdminService.GetUsersAsync(); }, "User updated."); }
+    private async Task ResetPasswordAsync() { if (selectedId is null) return; await RunAsync(async () => { await AdminService.ResetPasswordAsync(selectedId.Value, resetPassword); resetPassword=""; }, "Password reset; existing sessions were revoked."); }
+    private async Task DeleteAsync() { if (selectedId is null) return; await RunAsync(async () => { await AdminService.DeleteUserAsync(selectedId.Value); selectedId=null; users=await AdminService.GetUsersAsync(); }, "User anonymized and disabled."); }
+    private async Task RunAsync(Func<Task> action, string success) { try { busy=true; error=notice=""; await action(); notice=success; } catch(Exception ex) { error=ex.Message; } finally { busy=false; } }
+}

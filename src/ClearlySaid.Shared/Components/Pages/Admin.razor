@@ -1,0 +1,33 @@
+@page "/admin"
+@inject IAccountService AccountService
+
+<PageTitle>Admin - ClearlySaid</PageTitle>
+
+<main class="cs-admin-page">
+    <header class="cs-admin-header">
+        <div><h1>Admin console</h1><p>Manage accounts and inspect service activity.</p></div>
+        <a href="/">Back to ClearlySaid</a>
+    </header>
+    @if (!AccountService.IsInitialized)
+    {
+        <p>Loading…</p>
+    }
+    else if (AccountService.CurrentAccount?.Role != AccountRoles.Admin)
+    {
+        <section class="cs-admin-card"><h2>Access denied</h2><p>Sign in with an administrator account.</p></section>
+    }
+    else
+    {
+        <section class="cs-admin-grid">
+            <a class="cs-admin-card cs-admin-link" href="/admin/users"><h2>Users</h2><p>Create, edit, disable, delete, and reset passwords.</p></a>
+            <a class="cs-admin-card cs-admin-link" href="/admin/diagnostics"><h2>Diagnostics</h2><p>Review submissions, providers, latency, fallback activity, and application failures.</p></a>
+        </section>
+    }
+</main>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) { await AccountService.InitializeAsync(); StateHasChanged(); }
+    }
+}

@@ -8,7 +8,8 @@ namespace ClearlySaid.Shared.Services;
 
 public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStore tokenStore) :
     IAccountService,
-    IMessageRefinementService
+    IMessageRefinementService,
+    IAdminService
 {
     public AccountInfo? CurrentAccount { get; private set; }
     public bool IsInitialized { get; private set; }
@@ -107,6 +108,78 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
         return result?.Message ?? throw new AccountApiException("The message service returned an empty response.");
     }
 
+    public async Task<IReadOnlyList<AdminUser>> GetUsersAsync(CancellationToken cancellationToken = default) =>
+        await SendAdminAsync<List<AdminUser>>(HttpMethod.Get, "api/admin/users", null, cancellationToken);
+
+    public Task<AdminUser> CreateUserAsync(
+        CreateAdminUserRequest request,
+        CancellationToken cancellationToken = default) =>
+        SendAdminAsync<AdminUser>(HttpMethod.Post, "api/admin/users", request, cancellationToken);
+
+    public Task<AdminUser> UpdateUserAsync(
+        Guid userId,
+        UpdateAdminUserRequest request,
+        CancellationToken cancellationToken = default) =>
+        SendAdminAsync<AdminUser>(HttpMethod.Put, $"api/admin/users/{userId}", request, cancellationToken);
+
+    public async Task ResetPasswordAsync(
+        Guid userId,
+        string newPassword,
+        CancellationToken cancellationToken = default) =>
+        await SendAdminAsync<object>(
+            HttpMethod.Post,
+            $"api/admin/users/{userId}/reset-password",
+            new ResetAdminPasswordRequest(newPassword),
+            cancellationToken,
+            allowEmptyResponse: true);
+
+    public async Task DeleteUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        await SendAdminAsync<object>(
+            HttpMethod.Delete,
+            $"api/admin/users/{userId}",
+            null,
+            cancellationToken,
+            allowEmptyResponse: true);
+
+    public async Task<IReadOnlyList<AdminDiagnosticEvent>> GetDiagnosticsAsync(
+        int limit = 250,
+        CancellationToken cancellationToken = default) =>
+        await SendAdminAsync<List<AdminDiagnosticEvent>>(
+            HttpMethod.Get,
+            $"api/admin/diagnostics?limit={Math.Clamp(limit, 1, 500)}",
+            null,
+            cancellationToken);
+
+    private async Task<T> SendAdminAsync<T>(
+        HttpMethod method,
+        string uri,
+        object? body,
+        CancellationToken cancellationToken,
+        bool allowEmptyResponse = false)
+    {
+        var token = await tokenStore.GetAsync();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            throw new AccountApiException("Sign in with an administrator account.");
+        }
+
+        using var request = CreateAuthorizedRequest(method, uri, token);
+        if (body is not null)
+        {
+            request.Content = JsonContent.Create(body);
+        }
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        if (allowEmptyResponse)
+        {
+            return default!;
+        }
+
+        return await response.Content.ReadFromJsonAsync<T>(cancellationToken)
+            ?? throw new AccountApiException("The admin service returned an empty response.");
+    }
+
     private async Task CompleteAuthenticationAsync(
         HttpResponseMessage response,
         CancellationToken cancellationToken)
@@ -156,6 +229,7 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
         throw new AccountApiException(detail ?? response.StatusCode switch
         {
             HttpStatusCode.Unauthorized => "Your session has expired. Please sign in again.",
+            HttpStatusCode.Forbidden => "Administrator access is required.",
             HttpStatusCode.TooManyRequests => "You have reached your current usage limit.",
             _ => "ClearlySaid is temporarily unavailable. Please try again."
         });

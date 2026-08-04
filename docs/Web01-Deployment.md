@@ -7,7 +7,7 @@ Web01 is the public Blazor application and mobile gateway. It does not store the
 - Host: Ubuntu at `10.168.168.8`
 - Runtime: Docker
 - Container: `clearlysaid-web`
-- Container image: `clearlysaid-web:20260802.5`
+- Container image: `clearlysaid-web:20260803.3`
 - Published port: `5102` to container port `8080`
 - Persistent volume: `clearlysaid-data`
 - Public URL: `https://clearlysaid.healthcareautomation.services`
@@ -40,14 +40,24 @@ docker run --detach \
   --restart unless-stopped \
   --publish 5102:8080 \
   --volume clearlysaid-data:/var/lib/clearlysaid \
-  --env-file /etc/clearlysaid/web.env \
+  --env-file /home/ken/clearlysaid/secrets/web.env \
   --env Api01__BaseUrl=https://api01/ \
   --env CLEARLYSAID_INTERNAL_API_TOKEN=<same-private-token-used-on-api01> \
   clearlysaid-web:<version>
 ```
 
 Do not configure `OPENAI_API_KEY` on Web01. The OpenAI key belongs only on API01.
-The environment file must contain `ConnectionStrings__ClearlySaid`; see `docs/PostgreSql-Setup.md`. Keep it readable only by root and never copy it into the image.
+The environment file must contain `ConnectionStrings__ClearlySaid`; see `docs/PostgreSql-Setup.md`. Keep it readable only by its owner and never copy it into the image.
+
+To grant the first administrator, temporarily add the following to Web01's protected environment file and recreate the container:
+
+```text
+Admin__BootstrapEmail=<existing-account-email>
+```
+
+Bootstrapping only runs when no active administrator exists. After the role is granted, remove this setting from the environment file; the next container recreation will omit it. Admin API authorization reads the current database role on every request. Administrators can manage roles, entitlements, account status, and password resets from `/admin`; password resets revoke the affected user's sessions.
+
+The `/admin/diagnostics` console displays provider, model, request size, latency, fallback, failure, and structured application-event metadata. It never stores or displays submitted or rewritten message text.
 
 ## Validate
 

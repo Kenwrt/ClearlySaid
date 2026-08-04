@@ -7,7 +7,7 @@ API01 is the private model-routing tier. It sends refinement requests to on-prem
 - Host: Ubuntu at `10.168.168.7`
 - Runtime: Docker
 - Container: `clearlysaid-api`
-- Container image: `clearlysaid-api:20260802.2`
+- Container image: `clearlysaid-api:20260803.1`
 - Private endpoint: `http://10.168.168.7:5103`
 - Secrets file: `/home/ken/clearlysaid/secrets/api.env` with mode `600`
 - Primary: Ollama at `http://10.168.168.5:11434`, model `qwen3-vl:4b-instruct`

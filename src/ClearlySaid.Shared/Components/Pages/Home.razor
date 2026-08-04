@@ -48,7 +48,13 @@
                 <strong>@AccountService.CurrentAccount.Email</strong>
                 <span>@AccountService.CurrentAccount.Plan plan · @AccountService.CurrentAccount.Remaining of @AccountService.CurrentAccount.MonthlyAllowance messages remaining</span>
             </div>
-            <button class="cs-link-button" type="button" @onclick="LogoutAsync">Sign out</button>
+            <div class="cs-account-actions">
+                @if (AccountService.CurrentAccount.Role == AccountRoles.Admin)
+                {
+                    <a href="/admin">Admin console</a>
+                }
+                <button class="cs-link-button" type="button" @onclick="LogoutAsync">Sign out</button>
+            </div>
         </section>
     }
 

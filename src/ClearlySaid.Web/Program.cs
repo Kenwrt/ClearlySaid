@@ -40,6 +40,7 @@ builder.Services.AddScoped<ClearlySaidApiClient>(services => new ClearlySaidApiC
     services.GetRequiredService<IAccessTokenStore>()));
 builder.Services.AddScoped<IAccountService>(services => services.GetRequiredService<ClearlySaidApiClient>());
 builder.Services.AddScoped<IMessageRefinementService>(services => services.GetRequiredService<ClearlySaidApiClient>());
+builder.Services.AddScoped<IAdminService>(services => services.GetRequiredService<ClearlySaidApiClient>());
 builder.Services.AddScoped<Api01MessageRefinementService>();
 builder.Services.AddSingleton<ActiveRefinementRequests>();
 builder.Services.AddScoped<IDictationService, BrowserDictationService>();
@@ -92,12 +93,14 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseAntiforgery();
 app.UseRateLimiter();
+app.UseMiddleware<DiagnosticsMiddleware>();
 
 await app.Services.GetRequiredService<ClearlySaidDatabase>().InitializeAsync(CancellationToken.None);
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", application = "ClearlySaid" }));
 
 app.MapClearlySaidAccountEndpoints();
+app.MapClearlySaidAdminEndpoints();
 
 app.MapPost("/api/messages/refine", async (
     RefineMessageRequest request,

@@ -1,0 +1,60 @@
+@page "/admin/diagnostics"
+@implements IAsyncDisposable
+@inject IAccountService AccountService
+@inject IAdminService AdminService
+
+<PageTitle>Diagnostics - ClearlySaid Admin</PageTitle>
+
+<main class="cs-admin-page">
+    <header class="cs-admin-header"><div><h1>Diagnostics</h1><p>Submission routing, performance, fallback usage, and application failures. Message text is never recorded.</p></div><a href="/admin">Admin console</a></header>
+    @if (!ready) { <p>Loading…</p> }
+    else if (AccountService.CurrentAccount?.Role != AccountRoles.Admin) { <section class="cs-admin-card"><h2>Access denied</h2></section> }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(error)) { <p class="cs-error">@error</p> }
+        <section class="cs-admin-metrics">
+            <div><strong>@events.Count</strong><span>recent events</span></div>
+            <div><strong>@events.Count(x => x.Provider == "ollama")</strong><span>Ollama</span></div>
+            <div><strong>@events.Count(x => x.Provider == "openai")</strong><span>OpenAI</span></div>
+            <div><strong>@events.Count(x => !x.Succeeded)</strong><span>failures</span></div>
+        </section>
+        <section class="cs-admin-card cs-admin-toolbar">
+            <label>Filter<input placeholder="Email, provider, event, or error" @bind="filter" @bind:event="oninput" /></label>
+            <label>Severity<select @bind="severity"><option value="">All</option><option>Information</option><option>Error</option><option>Critical</option></select></label>
+            <label class="cs-admin-check"><input type="checkbox" @bind="autoRefresh" /> Auto-refresh</label>
+            <button class="cs-button cs-button-secondary" disabled="@busy" @onclick="LoadAsync">Refresh</button>
+        </section>
+        <section class="cs-admin-card">
+            <div class="cs-admin-table-wrap"><table class="cs-admin-table cs-diagnostics-table">
+                <thead><tr><th>UTC</th><th>Severity</th><th>Event</th><th>User</th><th>Provider</th><th>Size</th><th>Latency</th><th>Result</th></tr></thead>
+                <tbody>
+                    @foreach (var item in FilteredEvents)
+                    {
+                        <tr class="@(item.Succeeded ? "" : "cs-admin-row-error")">
+                            <td>@item.CreatedUtc.ToString("yyyy-MM-dd HH:mm:ss")</td><td>@item.Severity</td>
+                            <td><strong>@item.EventName</strong><small>@item.Category @if(item.RequestId is not null){<span> · @item.RequestId</span>}</small></td>
+                            <td>@(item.UserEmail ?? "—")</td><td>@(item.Provider ?? "—")<small>@item.Model</small></td>
+                            <td>@(item.InputCharacterCount?.ToString() ?? "—") in / @(item.OutputCharacterCount?.ToString() ?? "—") out</td>
+                            <td>@(item.LatencyMilliseconds is null ? "—" : $"{item.LatencyMilliseconds} ms")</td>
+                            <td>@(item.Succeeded ? item.FallbackUsed ? "Fallback" : "Success" : "Failed")<small>@item.Message</small></td>
+                        </tr>
+                    }
+                </tbody>
+            </table></div>
+        </section>
+    }
+</main>
+
+@code {
+    private IReadOnlyList<AdminDiagnosticEvent> events = [];
+    private bool ready, busy, autoRefresh = true;
+    private string filter = "", severity = "", error = "";
+    private readonly CancellationTokenSource refreshCancellation = new();
+    private IEnumerable<AdminDiagnosticEvent> FilteredEvents => events.Where(x =>
+        (string.IsNullOrEmpty(severity) || x.Severity == severity) &&
+        (string.IsNullOrWhiteSpace(filter) || string.Join(' ', x.EventName, x.Category, x.UserEmail, x.Provider, x.Model, x.Message).Contains(filter, StringComparison.OrdinalIgnoreCase)));
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if(!firstRender)return; await AccountService.InitializeAsync(); if(AccountService.CurrentAccount?.Role==AccountRoles.Admin) { await LoadAsync(); _=RefreshLoopAsync(); } ready=true; StateHasChanged(); }
+    private async Task LoadAsync() { try { busy=true; error=""; events=await AdminService.GetDiagnosticsAsync(); } catch(Exception ex) { error=ex.Message; } finally { busy=false; } }
+    private async Task RefreshLoopAsync() { try { using var timer=new PeriodicTimer(TimeSpan.FromSeconds(10)); while(await timer.WaitForNextTickAsync(refreshCancellation.Token)) { if(autoRefresh && !busy) await InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); }); } } catch(OperationCanceledException) { } }
+    public ValueTask DisposeAsync() { refreshCancellation.Cancel(); refreshCancellation.Dispose(); return ValueTask.CompletedTask; }
+}
