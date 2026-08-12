@@ -12,7 +12,7 @@
 		<ClearlySaidMauiVersion Condition="'$(ClearlySaidMauiVersion)' == ''">10.0.90</ClearlySaidMauiVersion>
 		<ClearlySaidToolkitVersion Condition="'$(ClearlySaidToolkitVersion)' == ''">15.0.0</ClearlySaidToolkitVersion>
 		<ClearlySaidExtensionsVersion Condition="'$(ClearlySaidExtensionsVersion)' == ''">10.0.10</ClearlySaidExtensionsVersion>
-		<GooglePlayBillingVersion Condition="'$(GooglePlayBillingVersion)' == ''">9.1.0.1</GooglePlayBillingVersion>
+		<GooglePlayBillingVersion Condition="'$(GooglePlayBillingVersion)' == ''">8.0.0</GooglePlayBillingVersion>
 		<ClearlySaidExternalPurchaseLinksEnabled Condition="'$(ClearlySaidExternalPurchaseLinksEnabled)' == ''">false</ClearlySaidExternalPurchaseLinksEnabled>
 		<DefineConstants Condition="'$(ClearlySaidExternalPurchaseLinksEnabled)' == 'true'">$(DefineConstants);CLEARLYSAID_EXTERNAL_PURCHASE_LINKS</DefineConstants>
 

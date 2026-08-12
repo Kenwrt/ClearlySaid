@@ -65,7 +65,7 @@ public sealed class GooglePlayBillingService : IBillingService, IDisposable
         var query = QueryProductDetailsParams.NewBuilder()
             .SetProductList([product])
             .Build();
-        var productResult = await billingClient.QueryProductDetailsAsync(query).WaitAsync(cancellationToken);
+        var productResult = await QueryProductDetailsAsync(query, cancellationToken);
         EnsureSuccess(productResult.Result, "Google Play could not load the ClearlySaid subscriptions.");
 
         var details = productResult.ProductDetails.FirstOrDefault(candidate =>
@@ -105,6 +105,22 @@ public sealed class GooglePlayBillingService : IBillingService, IDisposable
         {
             throw new AccountApiException("ClearlySaid could not open Google Play subscription management.");
         }
+    }
+
+    private async Task<(BillingResult Result, IList<ProductDetails> ProductDetails)> QueryProductDetailsAsync(
+        QueryProductDetailsParams query,
+        CancellationToken cancellationToken)
+    {
+        var completion = new TaskCompletionSource<(BillingResult, IList<ProductDetails>)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(
+            () => completion.TrySetCanceled(cancellationToken));
+        var listener = new ProductDetailsResponseListener(completion);
+        billingClient.QueryProductDetails(query, listener);
+
+        var result = await completion.Task;
+        GC.KeepAlive(listener);
+        return result;
     }
 
     private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
@@ -215,6 +231,14 @@ public sealed class GooglePlayBillingService : IBillingService, IDisposable
             throw new AccountApiException(
                 string.IsNullOrWhiteSpace(result.DebugMessage) ? message : $"{message} {result.DebugMessage}");
         }
+    }
+
+    private sealed class ProductDetailsResponseListener(
+        TaskCompletionSource<(BillingResult, IList<ProductDetails>)> completion)
+        : Java.Lang.Object, IProductDetailsResponseListener
+    {
+        public void OnProductDetailsResponse(BillingResult result, QueryProductDetailsResult productResult) =>
+            completion.TrySetResult((result, productResult.ProductDetailsList));
     }
 
     public void Dispose()
