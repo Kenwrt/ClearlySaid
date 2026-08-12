@@ -2,7 +2,8 @@ param(
     [string]$Configuration = "Release",
     [string]$OutputPath,
     [string]$KeystorePath = $env:CLEARLYSAID_ANDROID_KEYSTORE,
-    [string]$KeyAlias = $env:CLEARLYSAID_ANDROID_KEY_ALIAS
+    [string]$KeyAlias = $env:CLEARLYSAID_ANDROID_KEY_ALIAS,
+    [switch]$ExternalLinksProgramApproved
 )
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
@@ -24,15 +25,40 @@ if ([string]::IsNullOrWhiteSpace($env:CLEARLYSAID_ANDROID_STORE_PASSWORD) -or
 }
 
 $projectPath = Join-Path $repositoryRoot "src\ClearlySaid.App\ClearlySaid.App.csproj"
+$sharedProjectPath = Join-Path $repositoryRoot "src\ClearlySaid.Shared\ClearlySaid.Shared.csproj"
+$nugetConfigPath = Join-Path $repositoryRoot "NuGet.Config"
+$externalPurchaseLinksEnabled = if ($ExternalLinksProgramApproved) { "true" } else { "false" }
+
+dotnet restore $projectPath `
+    -p:TargetFrameworks=net10.0-android `
+    -p:ClearlySaidTargetFramework=net10.0 `
+    --configfile $nugetConfigPath
+
+if ($LASTEXITCODE -ne 0) {
+    throw "ClearlySaid Android restore failed with exit code $LASTEXITCODE."
+}
+
+dotnet restore $sharedProjectPath `
+    -p:ClearlySaidTargetFramework=net10.0 `
+    --configfile $nugetConfigPath
+
+if ($LASTEXITCODE -ne 0) {
+    throw "ClearlySaid shared restore failed with exit code $LASTEXITCODE."
+}
+
 dotnet publish $projectPath `
     --configuration $Configuration `
     --framework net10.0-android `
+    --no-restore `
+    -p:TargetFrameworks=net10.0-android `
+    -p:ClearlySaidTargetFramework=net10.0 `
     -p:AndroidPackageFormats=aab `
     -p:AndroidKeyStore=true `
     -p:AndroidSigningKeyStore="$KeystorePath" `
     -p:AndroidSigningKeyAlias="$KeyAlias" `
     -p:AndroidSigningStorePass="env:CLEARLYSAID_ANDROID_STORE_PASSWORD" `
     -p:AndroidSigningKeyPass="env:CLEARLYSAID_ANDROID_KEY_PASSWORD" `
+    -p:ClearlySaidExternalPurchaseLinksEnabled=$externalPurchaseLinksEnabled `
     -p:PublishDir="$OutputPath\"
 
 if ($LASTEXITCODE -ne 0) {

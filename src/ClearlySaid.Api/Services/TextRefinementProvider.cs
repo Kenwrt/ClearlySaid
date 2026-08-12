@@ -1,3 +1,5 @@
+using ClearlySaid.Shared.Models;
+
 namespace ClearlySaid.Api.Services;
 
 public interface ITextRefinementProvider
@@ -6,6 +8,7 @@ public interface ITextRefinementProvider
     string Model { get; }
     Task<TextRefinementResult> RefineAsync(
         string text,
+        MessageStyleOptions? style,
         Guid requestId,
         CancellationToken cancellationToken);
 }

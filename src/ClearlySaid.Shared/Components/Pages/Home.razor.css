@@ -77,6 +77,75 @@
 
 .cs-account-summary div { display: grid; gap: .15rem; }
 .cs-account-summary span { font-size: .85rem; }
+.cs-summary-upgrade { margin-top: .2rem; color: #4c55c8; font-size: .85rem; font-weight: 700; }
+
+.cs-billing {
+    margin-bottom: 1rem;
+    border: 1px solid #e5e7f0;
+    border-radius: 1rem;
+    padding: 1rem;
+    background: #fff;
+}
+
+.cs-billing-heading {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.cs-billing-tools { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; }
+
+.cs-billing h2,
+.cs-billing h3,
+.cs-billing p { margin: 0; }
+
+.cs-billing-heading p,
+.cs-plan-card p { margin-top: .3rem; color: #656b85; }
+
+.cs-billing-notice {
+    margin-top: .8rem !important;
+    border-radius: .65rem;
+    padding: .7rem .8rem;
+    background: #eef6ff;
+    color: #28496f;
+}
+
+.cs-plan-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+    margin-top: 1rem;
+}
+
+.cs-plan-card {
+    border: 1px solid #dfe3f0;
+    border-radius: .9rem;
+    padding: 1rem;
+}
+
+.cs-plan-card > strong { display: block; margin-top: .35rem; }
+.cs-plan-actions { display: grid; gap: .55rem; margin-top: .9rem; }
+.cs-plan-actions .cs-button { width: 100%; min-height: 2.8rem; }
+
+.cs-limit-callout {
+    margin-bottom: 1rem;
+    border: 1px solid #f0c36a;
+    border-radius: 1rem;
+    padding: 1rem;
+    background: #fff8e6;
+    color: #4d3710;
+}
+
+.cs-limit-callout h2,
+.cs-limit-callout p { margin: 0; }
+.cs-limit-callout p { margin-top: .35rem; }
+.cs-limit-callout .cs-button {
+    display: inline-flex;
+    align-items: center;
+    margin-top: .8rem;
+    text-decoration: none;
+}
 
 .cs-compose {
     border: 1px solid #e5e7f0;
@@ -119,9 +188,63 @@ textarea {
 
 textarea::placeholder { color: #989cb0; }
 
+.cs-style-controls {
+    margin: 0 0 1rem;
+    border: 1px solid #e2e5f2;
+    border-radius: .9rem;
+    padding: .9rem;
+    background: #f8f9ff;
+}
+
+.cs-style-controls legend {
+    padding: 0 .3rem;
+    font-weight: 800;
+}
+
+.cs-style-controls legend span {
+    margin-left: .35rem;
+    color: #656b85;
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.cs-style-controls p {
+    margin: 0 0 .75rem;
+    color: #656b85;
+    font-size: .85rem;
+}
+
+.cs-style-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .65rem;
+}
+
+.cs-style-grid label {
+    display: grid;
+    gap: .35rem;
+    color: #34384d;
+    font-size: .78rem;
+    font-weight: 800;
+}
+
+.cs-style-grid select {
+    width: 100%;
+    min-height: 2.65rem;
+    border: 1px solid #d7daea;
+    border-radius: .7rem;
+    padding: .45rem .65rem;
+    background: #fff;
+    color: #171a2b;
+    font: inherit;
+    font-weight: 600;
+}
+
 .cs-actions {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto auto 1fr;
     gap: .75rem;
 }
 
@@ -141,7 +264,7 @@ textarea::placeholder { color: #989cb0; }
 }
 
 .cs-button:disabled {
-    cursor: wait;
+    cursor: not-allowed;
     opacity: .65;
 }
 
@@ -191,6 +314,9 @@ textarea::placeholder { color: #989cb0; }
 
 @media (max-width: 34rem) {
     .cs-actions { grid-template-columns: 1fr; }
+    .cs-style-grid { grid-template-columns: 1fr; }
+    .cs-billing-heading { align-items: stretch; flex-direction: column; }
+    .cs-plan-grid { grid-template-columns: 1fr; }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -206,11 +332,18 @@ textarea::placeholder { color: #989cb0; }
     }
 
     .cs-account,
-    .cs-account-summary {
+    .cs-account-summary,
+    .cs-billing {
         border-color: #30344a;
         background: #1a1d2c;
         color: #f5f6ff;
     }
+
+    .cs-plan-card { border-color: #3b4057; }
+    .cs-billing-heading p,
+    .cs-plan-card p { color: #a9aec5; }
+    .cs-billing-notice { background: #202b42; color: #c8ddff; }
+    .cs-limit-callout { border-color: #725a2c; background: #302815; color: #ffe7ad; }
 
     .cs-account input {
         border-color: #40455f;
@@ -219,5 +352,14 @@ textarea::placeholder { color: #989cb0; }
     }
 
     textarea::placeholder { color: #7f849b; }
+    .cs-style-controls { border-color: #30344a; background: #151827; }
+    .cs-style-controls p,
+    .cs-style-controls legend span { color: #a9aec5; }
+    .cs-style-grid label { color: #daddf0; }
+    .cs-style-grid select {
+        border-color: #40455f;
+        background: #10121c;
+        color: #f5f6ff;
+    }
     .cs-error { color: #ff9c92; }
 }

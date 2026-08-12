@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using ClearlySaid.Shared.Models;
 using ClearlySaid.Web.Data;
+using ClearlySaid.Web.Services;
 
 namespace ClearlySaid.Web.Endpoints;
 
@@ -13,6 +14,7 @@ public static class AccountEndpoints
         endpoints.MapGet("/api/account/me", GetAccountAsync);
         endpoints.MapPost("/api/account/logout", LogoutAsync);
         endpoints.MapDelete("/api/account", DeleteAccountAsync);
+        endpoints.MapGet("/api/subscriptions/plans", GetSubscriptionPlans);
         endpoints.MapPost("/api/billing/google/verify", VerifyGooglePurchaseAsync);
         return endpoints;
     }
@@ -95,25 +97,36 @@ public static class AccountEndpoints
         HttpRequest request,
         GooglePurchaseVerificationRequest purchase,
         ClearlySaidDatabase database,
-        IConfiguration configuration,
+        GooglePlayBillingService googlePlayBilling,
         CancellationToken cancellationToken)
     {
-        if (await AuthenticateAsync(request, database, cancellationToken) is null)
+        var user = await AuthenticateAsync(request, database, cancellationToken);
+        if (user is null)
         {
             return Results.Unauthorized();
         }
 
-        if (string.IsNullOrWhiteSpace(configuration["GooglePlay:ServiceAccountJsonPath"]))
+        if (string.IsNullOrWhiteSpace(purchase.PurchaseToken))
         {
-            return Results.Problem(
-                "Google Play purchase verification will be enabled after the Play Console service account is connected.",
-                statusCode: StatusCodes.Status503ServiceUnavailable);
+            return Results.Problem("A Google Play purchase token is required.", statusCode: StatusCodes.Status400BadRequest);
         }
 
-        return Results.Problem(
-            "The Google Play product catalog has not been configured yet.",
-            statusCode: StatusCodes.Status503ServiceUnavailable);
+        try
+        {
+            return Results.Ok(await googlePlayBilling.VerifyAsync(user, purchase, cancellationToken));
+        }
+        catch (GooglePlayConfigurationException exception)
+        {
+            return Results.Problem(exception.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+        catch (GooglePlayPurchaseException exception)
+        {
+            return Results.Problem(exception.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
     }
+
+    private static IResult GetSubscriptionPlans() => Results.Ok(
+        SubscriptionPlans.All.Where(plan => !plan.IsInternal));
 
     public static async Task<AuthenticatedUser?> AuthenticateAsync(
         HttpRequest request,

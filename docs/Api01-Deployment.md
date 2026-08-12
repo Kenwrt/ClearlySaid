@@ -7,7 +7,7 @@ API01 is the private model-routing tier. It sends refinement requests to on-prem
 - Host: Ubuntu at `10.168.168.7`
 - Runtime: Docker
 - Container: `clearlysaid-api`
-- Container image: `clearlysaid-api:20260803.1`
+- Container image: `clearlysaid-api:20260806.1`
 - Private endpoint: `http://10.168.168.7:5103`
 - Secrets file: `/home/ken/clearlysaid/secrets/api.env` with mode `600`
 - Primary: Ollama at `http://10.168.168.5:11434`, model `qwen3-vl:4b-instruct`
@@ -33,8 +33,13 @@ OPENAI_API_KEY=<openai-api-key>
 Ollama__BaseUrl=http://10.168.168.5:11434/
 Ollama__Model=qwen3-vl:4b-instruct
 Ollama__TimeoutSeconds=25
+Ollama__KeepAlive=-1
+Ollama__MaximumOutputTokens=128
 Routing__OpenAiFallbackEnabled=true
 ```
+
+`Ollama__KeepAlive=-1` keeps the model resident in GPU memory. API01 also warms the
+model during application startup so the first user request does not pay the model-load cost.
 
 Use mode `600` on the file. Enter the OpenAI key using hidden terminal input so it isn't stored in shell history.
 

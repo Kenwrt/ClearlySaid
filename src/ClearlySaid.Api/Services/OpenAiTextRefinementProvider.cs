@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using ClearlySaid.Shared.Models;
 
 namespace ClearlySaid.Api.Services;
 
@@ -15,6 +16,7 @@ public sealed class OpenAiTextRefinementProvider(
 
     public async Task<TextRefinementResult> RefineAsync(
         string text,
+        MessageStyleOptions? style,
         Guid requestId,
         CancellationToken cancellationToken)
     {
@@ -33,7 +35,7 @@ public sealed class OpenAiTextRefinementProvider(
         requestMessage.Content = JsonContent.Create(new
         {
             model = Model,
-            instructions = RefinementPrompt.Instructions,
+            instructions = RefinementPrompt.BuildInstructions(style),
             input = text.Trim(),
             reasoning = new { effort = "none" },
             text = new { verbosity = "low" },

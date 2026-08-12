@@ -34,6 +34,8 @@ builder.Services.AddHttpClient("Api01", client =>
 
 builder.Services.AddSingleton<IPasswordHasher<UserCredential>, PasswordHasher<UserCredential>>();
 builder.Services.AddSingleton<ClearlySaidDatabase>();
+builder.Services.AddSingleton<StripeBillingService>();
+builder.Services.AddSingleton<GooglePlayBillingService>();
 builder.Services.AddScoped<IAccessTokenStore, BrowserAccessTokenStore>();
 builder.Services.AddScoped<ClearlySaidApiClient>(services => new ClearlySaidApiClient(
     services.GetRequiredService<IHttpClientFactory>().CreateClient("Public"),
@@ -41,6 +43,7 @@ builder.Services.AddScoped<ClearlySaidApiClient>(services => new ClearlySaidApiC
 builder.Services.AddScoped<IAccountService>(services => services.GetRequiredService<ClearlySaidApiClient>());
 builder.Services.AddScoped<IMessageRefinementService>(services => services.GetRequiredService<ClearlySaidApiClient>());
 builder.Services.AddScoped<IAdminService>(services => services.GetRequiredService<ClearlySaidApiClient>());
+builder.Services.AddScoped<IBillingService, StripeWebBillingService>();
 builder.Services.AddScoped<Api01MessageRefinementService>();
 builder.Services.AddSingleton<ActiveRefinementRequests>();
 builder.Services.AddScoped<IDictationService, BrowserDictationService>();
@@ -101,6 +104,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", application = "
 
 app.MapClearlySaidAccountEndpoints();
 app.MapClearlySaidAdminEndpoints();
+app.MapClearlySaidBillingEndpoints();
 
 app.MapPost("/api/messages/refine", async (
     RefineMessageRequest request,
@@ -132,6 +136,25 @@ app.MapPost("/api/messages/refine", async (
         {
             [nameof(request.Message)] = [$"The message must be {maximumCharacters:N0} characters or fewer."]
         });
+    }
+
+    if (!MessageStyleCatalog.TryNormalize(request.Style, out var style))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            [nameof(request.Style)] = ["Select valid message style options."]
+        });
+    }
+
+    if (style is not null)
+    {
+        var account = await database.GetAccountAsync(user.Id, cancellationToken);
+        if (!account.IsUnlimited && account.Plan == SubscriptionPlans.Free)
+        {
+            return Results.Problem(
+                "Message style controls require a paid plan.",
+                statusCode: StatusCodes.Status403Forbidden);
+        }
     }
 
     if (!activeRequests.TryEnter(user.Id, out var activeRequestLease))
@@ -171,6 +194,7 @@ app.MapPost("/api/messages/refine", async (
                 request.Message,
                 requestId,
                 user.Id,
+                style,
                 cancellationToken);
             await database.CompleteUsageAsync(reservation.UsageId.Value, result, cancellationToken);
             return Results.Ok(result);

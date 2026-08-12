@@ -33,6 +33,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<IAccountService>(services => services.GetRequiredService<ClearlySaidApiClient>());
         builder.Services.AddSingleton<IMessageRefinementService>(services => services.GetRequiredService<ClearlySaidApiClient>());
         builder.Services.AddSingleton<IAdminService>(services => services.GetRequiredService<ClearlySaidApiClient>());
+#if ANDROID
+        builder.Services.AddSingleton<IBillingService, GooglePlayBillingService>();
+#else
+        builder.Services.AddSingleton<IBillingService, MauiWebsiteBillingService>();
+#endif
         builder.Services.AddSingleton<MainPage>();
 
 #if DEBUG

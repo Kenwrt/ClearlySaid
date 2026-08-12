@@ -7,11 +7,14 @@ namespace ClearlySaid.App.Services;
 
 public sealed class RemoteMessageRefinementService(HttpClient httpClient) : IMessageRefinementService
 {
-    public async Task<string> RefineAsync(string message, CancellationToken cancellationToken = default)
+    public async Task<string> RefineAsync(
+        string message,
+        MessageStyleOptions? style = null,
+        CancellationToken cancellationToken = default)
     {
         using var response = await httpClient.PostAsJsonAsync(
             "api/messages/refine",
-            new RefineMessageRequest(message),
+            new RefineMessageRequest(message, Style: style),
             cancellationToken);
 
         if (!response.IsSuccessStatusCode)

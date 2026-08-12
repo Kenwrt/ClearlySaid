@@ -12,6 +12,9 @@
 		<ClearlySaidMauiVersion Condition="'$(ClearlySaidMauiVersion)' == ''">10.0.90</ClearlySaidMauiVersion>
 		<ClearlySaidToolkitVersion Condition="'$(ClearlySaidToolkitVersion)' == ''">15.0.0</ClearlySaidToolkitVersion>
 		<ClearlySaidExtensionsVersion Condition="'$(ClearlySaidExtensionsVersion)' == ''">10.0.10</ClearlySaidExtensionsVersion>
+		<GooglePlayBillingVersion Condition="'$(GooglePlayBillingVersion)' == ''">9.1.0.1</GooglePlayBillingVersion>
+		<ClearlySaidExternalPurchaseLinksEnabled Condition="'$(ClearlySaidExternalPurchaseLinksEnabled)' == ''">false</ClearlySaidExternalPurchaseLinksEnabled>
+		<DefineConstants Condition="'$(ClearlySaidExternalPurchaseLinksEnabled)' == 'true'">$(DefineConstants);CLEARLYSAID_EXTERNAL_PURCHASE_LINKS</DefineConstants>
 
 		<!-- Display name -->
 		<ApplicationTitle>ClearlySaid</ApplicationTitle>
@@ -20,8 +23,8 @@
 		<ApplicationId>com.clearlysaid.app</ApplicationId>
 
 		<!-- Versions -->
-		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
-		<ApplicationVersion>1</ApplicationVersion>
+		<ApplicationDisplayVersion>1.2</ApplicationDisplayVersion>
+		<ApplicationVersion>4</ApplicationVersion>
 
 		<!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
 		<WindowsPackageType>None</WindowsPackageType>
@@ -55,6 +58,7 @@
 		<PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(ClearlySaidMauiVersion)" />
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(ClearlySaidMauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="$(ClearlySaidExtensionsVersion)" />
+		<PackageReference Include="Xamarin.Android.Google.BillingClient" Version="$(GooglePlayBillingVersion)" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'" />
 	</ItemGroup>
 
 	<ItemGroup>

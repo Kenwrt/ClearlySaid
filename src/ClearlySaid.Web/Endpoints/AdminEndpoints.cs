@@ -34,9 +34,9 @@ public static class AdminEndpoints
         var admin = await RequireAdminAsync(httpRequest, database, cancellationToken);
         if (admin is null) return Results.StatusCode(StatusCodes.Status403Forbidden);
         if (!IsValidEmail(request.Email) || !IsValidPassword(request.Password) ||
-            !IsValidRole(request.Role) || !IsValidPlan(request.Plan, request.MonthlyAllowance))
+            !IsValidRole(request.Role) || !IsValidPlan(request.Plan))
         {
-            return Results.Problem("Enter a valid email, strong password, role, plan, and allowance.", statusCode: 400);
+            return Results.Problem("Enter a valid email, strong password, role, and subscription plan.", statusCode: 400);
         }
 
         var user = await database.CreateAdminUserAsync(request, cancellationToken);
@@ -59,9 +59,9 @@ public static class AdminEndpoints
             return Results.Problem("Administrators cannot disable or demote their own account.", statusCode: 409);
         }
         if (!IsValidEmail(request.Email) || !IsValidRole(request.Role) ||
-            !IsValidPlan(request.Plan, request.MonthlyAllowance))
+            !IsValidPlan(request.Plan))
         {
-            return Results.Problem("Enter a valid email, role, plan, and allowance.", statusCode: 400);
+            return Results.Problem("Enter a valid email, role, and subscription plan.", statusCode: 400);
         }
 
         try
@@ -172,6 +172,5 @@ public static class AdminEndpoints
         password.Any(char.IsLower) && password.Any(char.IsDigit);
 
     private static bool IsValidRole(string role) => role is AccountRoles.User or AccountRoles.Admin;
-    private static bool IsValidPlan(string plan, int allowance) =>
-        !string.IsNullOrWhiteSpace(plan) && plan.Length <= 50 && allowance is >= 0 and <= 100000;
+    private static bool IsValidPlan(string plan) => SubscriptionPlans.Find(plan) is not null;
 }

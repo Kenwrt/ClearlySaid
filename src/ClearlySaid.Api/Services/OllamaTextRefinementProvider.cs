@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;
+using ClearlySaid.Shared.Models;
 
 namespace ClearlySaid.Api.Services;
 
@@ -11,9 +12,12 @@ public sealed class OllamaTextRefinementProvider(
 {
     public string Name => "ollama";
     public string Model => configuration["Ollama:Model"] ?? "qwen3-vl:4b-instruct";
+    private int KeepAlive => configuration.GetValue("Ollama:KeepAlive", -1);
+    private int MaximumOutputTokens => configuration.GetValue("Ollama:MaximumOutputTokens", 128);
 
     public async Task<TextRefinementResult> RefineAsync(
         string text,
+        MessageStyleOptions? style,
         Guid requestId,
         CancellationToken cancellationToken)
     {
@@ -22,10 +26,11 @@ public sealed class OllamaTextRefinementProvider(
         var request = new
         {
             model = Model,
-            system = RefinementPrompt.Instructions,
+            system = RefinementPrompt.BuildInstructions(style),
             prompt = text.Trim(),
             stream = false,
-            options = new { temperature = 0.1, num_predict = 300 }
+            keep_alive = KeepAlive,
+            options = new { temperature = 0.1, num_predict = MaximumOutputTokens }
         };
 
         HttpResponseMessage response;
@@ -76,6 +81,8 @@ public sealed class OllamaTextRefinementProvider(
                     throw new DefiniteProviderFailureException("Ollama returned an empty response.");
                 }
 
+                LogTimingDetails(document.RootElement, requestId);
+
                 return new TextRefinementResult(output, Name, Model, stopwatch.ElapsedMilliseconds);
             }
             catch (JsonException exception)
@@ -84,4 +91,38 @@ public sealed class OllamaTextRefinementProvider(
             }
         }
     }
+
+    private void LogTimingDetails(JsonElement response, Guid requestId)
+    {
+        var totalMilliseconds = GetDurationMilliseconds(response, "total_duration");
+        var loadMilliseconds = GetDurationMilliseconds(response, "load_duration");
+        var promptMilliseconds = GetDurationMilliseconds(response, "prompt_eval_duration");
+        var generationMilliseconds = GetDurationMilliseconds(response, "eval_duration");
+        var promptTokens = GetInt64(response, "prompt_eval_count");
+        var outputTokens = GetInt64(response, "eval_count");
+        var tokensPerSecond = generationMilliseconds > 0
+            ? outputTokens * 1000d / generationMilliseconds
+            : 0d;
+
+        logger.LogInformation(
+            "Ollama timings for request {RequestId}: total {TotalMilliseconds} ms, load {LoadMilliseconds} ms, " +
+            "prompt {PromptMilliseconds} ms ({PromptTokens} tokens), generation {GenerationMilliseconds} ms " +
+            "({OutputTokens} tokens, {TokensPerSecond:F1} tokens/sec).",
+            requestId,
+            totalMilliseconds,
+            loadMilliseconds,
+            promptMilliseconds,
+            promptTokens,
+            generationMilliseconds,
+            outputTokens,
+            tokensPerSecond);
+    }
+
+    private static long GetDurationMilliseconds(JsonElement response, string propertyName) =>
+        GetInt64(response, propertyName) / 1_000_000;
+
+    private static long GetInt64(JsonElement response, string propertyName) =>
+        response.TryGetProperty(propertyName, out var value) && value.TryGetInt64(out var result)
+            ? result
+            : 0;
 }
