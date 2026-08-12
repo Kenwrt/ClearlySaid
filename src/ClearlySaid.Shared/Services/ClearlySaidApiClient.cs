@@ -90,7 +90,30 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
         SetAccount(null);
     }
 
-    public async Task<string> RefineAsync(string message, CancellationToken cancellationToken = default)
+    public async Task<GooglePurchaseVerificationResponse> VerifyGooglePurchaseAsync(
+        GooglePurchaseVerificationRequest purchase,
+        CancellationToken cancellationToken = default)
+    {
+        var token = await tokenStore.GetAsync();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            throw new AccountApiException("Sign in before purchasing a ClearlySaid subscription.");
+        }
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Post, "api/billing/google/verify", token);
+        request.Content = JsonContent.Create(purchase);
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        var verification = await response.Content.ReadFromJsonAsync<GooglePurchaseVerificationResponse>(cancellationToken)
+            ?? throw new AccountApiException("Google Play returned an empty verification response.");
+        SetAccount(verification.Account);
+        return verification;
+    }
+
+    public async Task<string> RefineAsync(
+        string message,
+        MessageStyleOptions? style = null,
+        CancellationToken cancellationToken = default)
     {
         var token = await tokenStore.GetAsync();
         if (string.IsNullOrWhiteSpace(token))
@@ -99,7 +122,7 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
         }
 
         using var request = CreateAuthorizedRequest(HttpMethod.Post, "api/messages/refine", token);
-        request.Content = JsonContent.Create(new RefineMessageRequest(message, Guid.NewGuid()));
+        request.Content = JsonContent.Create(new RefineMessageRequest(message, Guid.NewGuid(), Style: style));
         using var response = await httpClient.SendAsync(request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
 

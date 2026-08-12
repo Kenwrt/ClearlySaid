@@ -7,6 +7,7 @@ backup_name="${2:-clearlysaid-web-rollback}"
 candidate_name="clearlysaid-web-candidate"
 web_env="/home/ken/clearlysaid/secrets/web.env"
 database_env="/home/ken/clearlysaid/secrets/database.env"
+google_play_credential="/home/ken/clearlysaid/secrets/google-play-service-account.json"
 
 if docker container inspect "${backup_name}" >/dev/null 2>&1; then
   echo "Rollback container ${backup_name} already exists; refusing to overwrite it." >&2
@@ -27,6 +28,15 @@ rollback() {
 }
 trap rollback ERR
 
+google_play_args=()
+if [[ -f "${google_play_credential}" ]]; then
+  google_play_args+=(
+    --volume "${google_play_credential}:/run/secrets/google-play-service-account.json:ro"
+    --env "GooglePlay__ServiceAccountJsonPath=/run/secrets/google-play-service-account.json"
+    --env "GooglePlay__PackageName=com.clearlysaid.app"
+  )
+fi
+
 docker run --detach \
   --name "${current_name}" \
   --restart unless-stopped \
@@ -34,6 +44,7 @@ docker run --detach \
   --volume clearlysaid-data:/var/lib/clearlysaid \
   --env-file "${web_env}" \
   --env-file "${database_env}" \
+  "${google_play_args[@]}" \
   "${new_image}" >/dev/null
 
 healthy=false

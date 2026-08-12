@@ -12,7 +12,6 @@ public sealed class ClearlySaidDatabase(
     IPasswordHasher<UserCredential> passwordHasher,
     ILogger<ClearlySaidDatabase> logger)
 {
-    private const int FreeMonthlyAllowance = 20;
     private readonly string connectionString = configuration.GetConnectionString("ClearlySaid")
         ?? throw new InvalidOperationException(
             "ConnectionStrings:ClearlySaid is required. Configure it with an environment variable; never commit a database password.");
@@ -65,14 +64,14 @@ public sealed class ClearlySaidDatabase(
                     INSERT INTO clearlysaid_users (id, email, normalized_email, password_hash)
                     VALUES (@id, @email, @normalizedEmail, @passwordHash);
                     INSERT INTO clearlysaid_entitlements
-                        (user_id, plan_id, monthly_allowance, status, period_started_at, period_ends_at)
-                    VALUES (@id, 'free', @allowance, 'active', date_trunc('month', now()), date_trunc('month', now()) + interval '1 month');
+                        (user_id, plan_id, monthly_allowance, status, provider, period_started_at, period_ends_at)
+                    VALUES (@id, 'free', @allowance, 'active', 'system', date_trunc('month', now()), date_trunc('month', now()) + interval '1 month');
                     """;
                 command.Parameters.AddWithValue("id", user.Id);
                 command.Parameters.AddWithValue("email", email.Trim());
                 command.Parameters.AddWithValue("normalizedEmail", normalizedEmail);
                 command.Parameters.AddWithValue("passwordHash", passwordHash);
-                command.Parameters.AddWithValue("allowance", FreeMonthlyAllowance);
+                command.Parameters.AddWithValue("allowance", SubscriptionPlans.FreePlan.MonthlyAllowance);
                 await command.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -166,6 +165,192 @@ public sealed class ClearlySaidDatabase(
         return ReadAccount(reader);
     }
 
+    public async Task<string?> GetStripeCustomerReferenceAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT customer_reference
+            FROM clearlysaid_billing_subscriptions
+            WHERE user_id = @userId AND provider = 'stripe' AND customer_reference IS NOT NULL
+            ORDER BY updated_at DESC
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("userId", userId);
+        return await command.ExecuteScalarAsync(cancellationToken) as string;
+    }
+
+    public async Task<Guid?> FindUserIdByStripeCustomerAsync(
+        string customerReference,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT user_id
+            FROM clearlysaid_billing_subscriptions
+            WHERE provider = 'stripe' AND customer_reference = @customerReference
+            ORDER BY updated_at DESC
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("customerReference", customerReference);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is Guid userId ? userId : null;
+    }
+
+    public async Task<Guid?> FindUserIdByBillingReferenceAsync(
+        string provider,
+        string providerReference,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT user_id
+            FROM clearlysaid_billing_subscriptions
+            WHERE provider = @provider AND provider_reference = @providerReference
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("provider", provider);
+        command.Parameters.AddWithValue("providerReference", providerReference);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is Guid userId ? userId : null;
+    }
+
+    public async Task<bool> ApplyBillingSubscriptionAsync(
+        BillingSubscriptionUpdate update,
+        CancellationToken cancellationToken)
+    {
+        var plan = SubscriptionPlans.GetRequired(update.PlanId);
+        if (!plan.IsPurchasable)
+        {
+            throw new ArgumentException("Billing providers can only assign purchasable plans.", nameof(update));
+        }
+
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        await using (var eventCommand = connection.CreateCommand())
+        {
+            eventCommand.Transaction = transaction;
+            eventCommand.CommandText = """
+                INSERT INTO clearlysaid_billing_events (provider, event_id, event_type, occurred_at)
+                VALUES (@provider, @eventId, @eventType, @occurredAt)
+                ON CONFLICT DO NOTHING
+                RETURNING event_id;
+                """;
+            eventCommand.Parameters.AddWithValue("provider", update.Provider);
+            eventCommand.Parameters.AddWithValue("eventId", update.EventId);
+            eventCommand.Parameters.AddWithValue("eventType", update.EventType);
+            eventCommand.Parameters.AddWithValue("occurredAt", update.EventCreatedAt);
+            if (await eventCommand.ExecuteScalarAsync(cancellationToken) is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return false;
+            }
+        }
+
+        await using (var sourceCommand = connection.CreateCommand())
+        {
+            sourceCommand.Transaction = transaction;
+            sourceCommand.CommandText = """
+                INSERT INTO clearlysaid_billing_subscriptions
+                    (provider, provider_reference, user_id, customer_reference,
+                     price_reference, plan_id, status, period_started_at, period_ends_at,
+                     last_event_created_at, updated_at)
+                VALUES
+                    (@provider, @providerReference, @userId, @customerReference,
+                     @priceReference, @planId, @status, @periodStartedAt, @periodEndsAt,
+                     @eventCreatedAt, now())
+                ON CONFLICT (provider, provider_reference) DO UPDATE SET
+                    user_id = excluded.user_id,
+                    customer_reference = excluded.customer_reference,
+                    price_reference = excluded.price_reference,
+                    plan_id = excluded.plan_id,
+                    status = excluded.status,
+                    period_started_at = excluded.period_started_at,
+                    period_ends_at = excluded.period_ends_at,
+                    last_event_created_at = excluded.last_event_created_at,
+                    updated_at = now()
+                WHERE excluded.last_event_created_at >= clearlysaid_billing_subscriptions.last_event_created_at;
+                """;
+            sourceCommand.Parameters.AddWithValue("provider", update.Provider);
+            sourceCommand.Parameters.AddWithValue("providerReference", update.ProviderReference);
+            sourceCommand.Parameters.AddWithValue("userId", update.UserId);
+            sourceCommand.Parameters.AddWithValue("customerReference", update.CustomerReference);
+            sourceCommand.Parameters.AddWithValue("priceReference", update.PriceReference);
+            sourceCommand.Parameters.AddWithValue("planId", plan.Id);
+            sourceCommand.Parameters.AddWithValue("status", update.Status);
+            sourceCommand.Parameters.AddWithValue("periodStartedAt", update.PeriodStartedAt);
+            sourceCommand.Parameters.AddWithValue("periodEndsAt", update.PeriodEndsAt);
+            sourceCommand.Parameters.AddWithValue("eventCreatedAt", update.EventCreatedAt);
+            await sourceCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        string effectivePlan = SubscriptionPlans.Free;
+        string effectiveProvider = "system";
+        string? effectiveReference = null;
+        await using (var effectiveCommand = connection.CreateCommand())
+        {
+            effectiveCommand.Transaction = transaction;
+            effectiveCommand.CommandText = """
+                SELECT plan_id, provider, provider_reference
+                FROM clearlysaid_billing_subscriptions
+                WHERE user_id = @userId
+                  AND status IN ('active', 'trialing', 'past_due')
+                  AND period_ends_at > now()
+                ORDER BY CASE plan_id WHEN 'pro' THEN 2 WHEN 'standard' THEN 1 ELSE 0 END DESC,
+                         period_ends_at DESC
+                LIMIT 1;
+                """;
+            effectiveCommand.Parameters.AddWithValue("userId", update.UserId);
+            await using var reader = await effectiveCommand.ExecuteReaderAsync(cancellationToken);
+            if (await reader.ReadAsync(cancellationToken))
+            {
+                effectivePlan = reader.GetString(0);
+                effectiveProvider = reader.GetString(1);
+                effectiveReference = reader.GetString(2);
+            }
+        }
+
+        var effectiveDefinition = SubscriptionPlans.GetRequired(effectivePlan);
+        await using (var entitlementCommand = connection.CreateCommand())
+        {
+            entitlementCommand.Transaction = transaction;
+            entitlementCommand.CommandText = """
+                UPDATE clearlysaid_entitlements q
+                SET plan_id = @planId,
+                    monthly_allowance = @allowance,
+                    status = 'active',
+                    provider = @provider,
+                    provider_reference = @providerReference,
+                    period_started_at = CASE WHEN q.period_ends_at <= now()
+                        THEN date_trunc('month', now()) ELSE q.period_started_at END,
+                    period_ends_at = CASE WHEN q.period_ends_at <= now()
+                        THEN date_trunc('month', now()) + interval '1 month' ELSE q.period_ends_at END,
+                    updated_at = now()
+                FROM clearlysaid_users u
+                WHERE q.user_id = @userId
+                  AND u.id = q.user_id
+                  AND u.role <> 'Admin'
+                  AND coalesce(q.provider, '') <> 'admin';
+                """;
+            entitlementCommand.Parameters.AddWithValue("userId", update.UserId);
+            entitlementCommand.Parameters.AddWithValue("planId", effectiveDefinition.Id);
+            entitlementCommand.Parameters.AddWithValue("allowance", effectiveDefinition.MonthlyAllowance);
+            entitlementCommand.Parameters.AddWithValue("provider", effectiveProvider);
+            entitlementCommand.Parameters.AddWithValue(
+                "providerReference",
+                (object?)effectiveReference ?? DBNull.Value);
+            await entitlementCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<UsageReservation> TryReserveUsageAsync(
         Guid userId,
         Guid requestId,
@@ -179,9 +364,11 @@ public sealed class ClearlySaidDatabase(
         command.Transaction = transaction;
         command.CommandText = """
             WITH entitlement AS (
-                SELECT user_id, monthly_allowance, period_started_at, period_ends_at
-                FROM clearlysaid_entitlements
-                WHERE user_id = @userId AND status = 'active'
+                SELECT q.user_id, q.monthly_allowance, q.period_started_at, q.period_ends_at,
+                       u.role = 'Admin' AS is_unlimited
+                FROM clearlysaid_entitlements q
+                JOIN clearlysaid_users u ON u.id = q.user_id
+                WHERE q.user_id = @userId AND q.status = 'active'
                 FOR UPDATE
             ), usage_count AS (
                 SELECT count(*)::int AS used
@@ -196,7 +383,7 @@ public sealed class ClearlySaidDatabase(
             SELECT entitlement.user_id, @requestId, @characterCount,
                    ceiling(@characterCount / 4.0)::integer, 'reserved', false
             FROM entitlement, usage_count
-            WHERE usage_count.used < entitlement.monthly_allowance
+            WHERE entitlement.is_unlimited OR usage_count.used < entitlement.monthly_allowance
             ON CONFLICT DO NOTHING
             RETURNING id;
             """;
@@ -263,12 +450,14 @@ public sealed class ClearlySaidDatabase(
         command.CommandText = """
             SELECT u.id, u.email, u.role, q.plan_id, q.monthly_allowance,
                    count(e.id) FILTER (WHERE e.status IN ('reserved', 'completed'))::int,
+                   q.status, q.provider, q.period_ends_at,
                    u.disabled_at IS NOT NULL, u.created_at
             FROM clearlysaid_users u
             JOIN clearlysaid_entitlements q ON q.user_id = u.id
             LEFT JOIN clearlysaid_usage_events e ON e.user_id = u.id
                  AND e.occurred_at >= q.period_started_at AND e.occurred_at < q.period_ends_at
-            GROUP BY u.id, u.email, u.role, q.plan_id, q.monthly_allowance, u.disabled_at, u.created_at
+            GROUP BY u.id, u.email, u.role, q.plan_id, q.monthly_allowance,
+                     q.status, q.provider, q.period_ends_at, u.disabled_at, u.created_at
             ORDER BY u.created_at DESC;
             """;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -277,8 +466,9 @@ public sealed class ClearlySaidDatabase(
         {
             users.Add(new AdminUser(
                 reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
-                reader.GetInt32(4), reader.GetInt32(5), reader.GetBoolean(6),
-                reader.GetFieldValue<DateTimeOffset>(7)));
+                reader.GetInt32(4), reader.GetInt32(5), reader.GetString(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7), reader.GetFieldValue<DateTimeOffset>(8),
+                reader.GetBoolean(9), reader.GetFieldValue<DateTimeOffset>(10)));
         }
 
         return users;
@@ -288,6 +478,7 @@ public sealed class ClearlySaidDatabase(
         CreateAdminUserRequest request,
         CancellationToken cancellationToken)
     {
+        var plan = SubscriptionPlans.GetRequired(request.Plan);
         var normalizedEmail = NormalizeEmail(request.Email);
         var user = new UserCredential(Guid.NewGuid(), normalizedEmail);
         var passwordHash = passwordHasher.HashPassword(user, request.Password);
@@ -301,16 +492,16 @@ public sealed class ClearlySaidDatabase(
                 INSERT INTO clearlysaid_users (id, email, normalized_email, password_hash, role)
                 VALUES (@id, @email, @normalizedEmail, @passwordHash, @role);
                 INSERT INTO clearlysaid_entitlements
-                    (user_id, plan_id, monthly_allowance, status, period_started_at, period_ends_at)
-                VALUES (@id, @plan, @allowance, 'active', date_trunc('month', now()), date_trunc('month', now()) + interval '1 month');
+                    (user_id, plan_id, monthly_allowance, status, provider, period_started_at, period_ends_at)
+                VALUES (@id, @plan, @allowance, 'active', 'admin', date_trunc('month', now()), date_trunc('month', now()) + interval '1 month');
                 """;
             command.Parameters.AddWithValue("id", user.Id);
             command.Parameters.AddWithValue("email", request.Email.Trim());
             command.Parameters.AddWithValue("normalizedEmail", normalizedEmail);
             command.Parameters.AddWithValue("passwordHash", passwordHash);
             command.Parameters.AddWithValue("role", request.Role);
-            command.Parameters.AddWithValue("plan", request.Plan.Trim());
-            command.Parameters.AddWithValue("allowance", request.MonthlyAllowance);
+            command.Parameters.AddWithValue("plan", plan.Id);
+            command.Parameters.AddWithValue("allowance", plan.MonthlyAllowance);
             await command.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return (await GetAdminUsersAsync(cancellationToken)).Single(x => x.Id == user.Id);
@@ -327,6 +518,7 @@ public sealed class ClearlySaidDatabase(
         UpdateAdminUserRequest request,
         CancellationToken cancellationToken)
     {
+        var plan = SubscriptionPlans.GetRequired(request.Plan);
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await EnsureAdminRemainsAsync(connection, transaction, userId, request.Role, request.IsDisabled, cancellationToken);
@@ -342,6 +534,7 @@ public sealed class ClearlySaidDatabase(
                 UPDATE clearlysaid_entitlements
                 SET plan_id = @plan, monthly_allowance = @allowance,
                     status = CASE WHEN @disabled THEN 'disabled' ELSE 'active' END,
+                    provider = 'admin', provider_reference = NULL,
                     updated_at = now()
                 WHERE user_id = @id;
                 UPDATE clearlysaid_access_tokens SET revoked_at = now()
@@ -351,8 +544,8 @@ public sealed class ClearlySaidDatabase(
             command.Parameters.AddWithValue("email", request.Email.Trim());
             command.Parameters.AddWithValue("normalizedEmail", NormalizeEmail(request.Email));
             command.Parameters.AddWithValue("role", request.Role);
-            command.Parameters.AddWithValue("plan", request.Plan.Trim());
-            command.Parameters.AddWithValue("allowance", request.MonthlyAllowance);
+            command.Parameters.AddWithValue("plan", plan.Id);
+            command.Parameters.AddWithValue("allowance", plan.MonthlyAllowance);
             command.Parameters.AddWithValue("disabled", request.IsDisabled);
             var affected = await command.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -558,13 +751,40 @@ public sealed class ClearlySaidDatabase(
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            UPDATE clearlysaid_entitlements
-            SET period_started_at = date_trunc('month', now()),
-                period_ends_at = date_trunc('month', now()) + interval '1 month',
+            WITH effective AS (
+                SELECT plan_id, provider, provider_reference
+                FROM clearlysaid_billing_subscriptions
+                WHERE user_id = @userId
+                  AND status IN ('active', 'trialing', 'past_due')
+                  AND period_ends_at > now()
+                ORDER BY CASE plan_id WHEN 'pro' THEN 2 WHEN 'standard' THEN 1 ELSE 0 END DESC,
+                         period_ends_at DESC
+                LIMIT 1
+            )
+            UPDATE clearlysaid_entitlements q
+            SET plan_id = coalesce((SELECT plan_id FROM effective), 'free'),
+                monthly_allowance = CASE coalesce((SELECT plan_id FROM effective), 'free')
+                    WHEN 'pro' THEN @proAllowance
+                    WHEN 'standard' THEN @standardAllowance
+                    ELSE @freeAllowance
+                END,
+                provider = coalesce((SELECT provider FROM effective), 'system'),
+                provider_reference = (SELECT provider_reference FROM effective),
+                period_started_at = CASE WHEN q.period_ends_at <= now()
+                    THEN date_trunc('month', now()) ELSE q.period_started_at END,
+                period_ends_at = CASE WHEN q.period_ends_at <= now()
+                    THEN date_trunc('month', now()) + interval '1 month' ELSE q.period_ends_at END,
                 updated_at = now()
-            WHERE user_id = @userId AND period_ends_at <= now();
+            FROM clearlysaid_users u
+            WHERE q.user_id = @userId
+              AND u.id = q.user_id
+              AND u.role <> 'Admin'
+              AND coalesce(q.provider, '') <> 'admin';
             """;
         command.Parameters.AddWithValue("userId", userId);
+        command.Parameters.AddWithValue("freeAllowance", SubscriptionPlans.FreePlan.MonthlyAllowance);
+        command.Parameters.AddWithValue("standardAllowance", SubscriptionPlans.StandardPlan.MonthlyAllowance);
+        command.Parameters.AddWithValue("proAllowance", SubscriptionPlans.ProPlan.MonthlyAllowance);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -598,7 +818,8 @@ public sealed class ClearlySaidDatabase(
 
     private static AccountInfo ReadAccount(NpgsqlDataReader reader) => new(
         reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetInt32(3),
-        reader.GetInt32(4), reader.GetFieldValue<DateTimeOffset>(5), reader.GetString(6));
+        reader.GetInt32(4), reader.GetFieldValue<DateTimeOffset>(5), reader.GetString(6),
+        reader.IsDBNull(7) ? null : reader.GetString(7));
 
     private static string NormalizeEmail(string email) => email.Trim().ToUpperInvariant();
     private static byte[] HashToken(string token) => SHA256.HashData(Encoding.UTF8.GetBytes(token));
@@ -606,13 +827,13 @@ public sealed class ClearlySaidDatabase(
     private const string AccountSql = """
         SELECT u.id, u.email, q.plan_id, q.monthly_allowance,
                count(e.id) FILTER (WHERE e.status IN ('reserved', 'completed'))::int AS used,
-               q.period_ends_at, u.role
+               q.period_ends_at, u.role, q.provider
         FROM clearlysaid_users u
         JOIN clearlysaid_entitlements q ON q.user_id = u.id
         LEFT JOIN clearlysaid_usage_events e ON e.user_id = u.id
              AND e.occurred_at >= q.period_started_at AND e.occurred_at < q.period_ends_at
         WHERE u.id = @userId
-        GROUP BY u.id, u.email, q.plan_id, q.monthly_allowance, q.period_ends_at, u.role;
+        GROUP BY u.id, u.email, q.plan_id, q.monthly_allowance, q.period_ends_at, u.role, q.provider;
         """;
 
     private const string SchemaSql = """
@@ -636,6 +857,52 @@ public sealed class ClearlySaidDatabase(
             period_ends_at timestamptz NOT NULL,
             updated_at timestamptz NOT NULL DEFAULT now()
         );
+        CREATE TABLE IF NOT EXISTS clearlysaid_billing_subscriptions (
+            provider text NOT NULL,
+            provider_reference text NOT NULL,
+            user_id uuid NOT NULL REFERENCES clearlysaid_users(id) ON DELETE CASCADE,
+            customer_reference text NULL,
+            price_reference text NOT NULL,
+            plan_id text NOT NULL,
+            status text NOT NULL,
+            period_started_at timestamptz NOT NULL,
+            period_ends_at timestamptz NOT NULL,
+            last_event_created_at timestamptz NOT NULL,
+            updated_at timestamptz NOT NULL DEFAULT now(),
+            PRIMARY KEY (provider, provider_reference)
+        );
+        CREATE INDEX IF NOT EXISTS ix_clearlysaid_billing_user
+            ON clearlysaid_billing_subscriptions(user_id, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS ix_clearlysaid_billing_customer
+            ON clearlysaid_billing_subscriptions(provider, customer_reference);
+        CREATE TABLE IF NOT EXISTS clearlysaid_billing_events (
+            provider text NOT NULL,
+            event_id text NOT NULL,
+            event_type text NOT NULL,
+            occurred_at timestamptz NOT NULL,
+            processed_at timestamptz NOT NULL DEFAULT now(),
+            PRIMARY KEY (provider, event_id)
+        );
+        UPDATE clearlysaid_entitlements
+        SET plan_id = CASE
+                WHEN lower(trim(plan_id)) IN ('standard', 'personal', 'baseline') THEN 'standard'
+                WHEN lower(trim(plan_id)) = 'development' THEN 'development'
+                WHEN lower(trim(plan_id)) = 'pro' THEN 'pro'
+                ELSE 'free'
+            END,
+            monthly_allowance = CASE
+                WHEN lower(trim(plan_id)) IN ('standard', 'personal', 'baseline') THEN 300
+                WHEN lower(trim(plan_id)) = 'development' THEN 10000
+                WHEN lower(trim(plan_id)) = 'pro' THEN 1000
+                ELSE 20
+            END
+        WHERE plan_id NOT IN ('free', 'development', 'standard', 'pro')
+           OR monthly_allowance <> CASE plan_id
+                WHEN 'development' THEN 10000
+                WHEN 'standard' THEN 300
+                WHEN 'pro' THEN 1000
+                ELSE 20
+              END;
         CREATE TABLE IF NOT EXISTS clearlysaid_access_tokens (
             id uuid PRIMARY KEY,
             user_id uuid NOT NULL REFERENCES clearlysaid_users(id) ON DELETE CASCADE,
@@ -682,3 +949,17 @@ public sealed class ClearlySaidDatabase(
 public sealed record UserCredential(Guid Id, string NormalizedEmail);
 public sealed record AuthenticatedUser(Guid Id, string Email, string Role);
 public sealed record UsageReservation(long? UsageId, bool Duplicate);
+
+public sealed record BillingSubscriptionUpdate(
+    string Provider,
+    string EventId,
+    string EventType,
+    DateTimeOffset EventCreatedAt,
+    Guid UserId,
+    string CustomerReference,
+    string ProviderReference,
+    string PriceReference,
+    string PlanId,
+    string Status,
+    DateTimeOffset PeriodStartedAt,
+    DateTimeOffset PeriodEndsAt);

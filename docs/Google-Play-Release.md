@@ -9,14 +9,14 @@
 
 ## Product catalog
 
-Create these subscription identifiers after final pricing approval:
+Create two subscriptions, each with `monthly` and `annual` auto-renewing base plans:
 
-- `clearlysaid_personal_monthly` — proposed 300 refinements per period.
-- `clearlysaid_personal_annual` — proposed 300 refinements per month while active.
-- `clearlysaid_pro_monthly` — proposed 1,000 refinements per period.
-- `clearlysaid_pro_annual` — proposed 1,000 refinements per month while active.
+- `clearlysaid_standard` — Standard, 300 refinements per month. Price `monthly` at $2.49/month and `annual` at $24.99/year.
+- `clearlysaid_pro` — Pro, 1,000 refinements per month. Price `monthly` at $4.99/month and `annual` at $49.99/year.
 
-Never grant an entitlement from unverified data supplied by the Android app.
+Activate both base plans and make them available in the same countries as the app. Product and base-plan IDs are permanent after activation.
+
+Free includes 20 refinements per month. Development includes 10,000 and can only be assigned by an administrator. Administrators bypass the monthly quota regardless of their selected plan. Never grant an entitlement from unverified data supplied by the Android app.
 
 ## Build the upload bundle
 
@@ -46,4 +46,33 @@ Upload the generated `.aab`, never the debug testing APK. Increment `Application
 3. Review the pre-launch report and Android vitals.
 4. Roll out production at 10%, 25%, 50%, then 100% while watching errors, database health, API usage, and OpenAI cost.
 
-Google Play Billing is intentionally not activated until the Play Console application, products, service account, and package name exist. The server endpoint returns 503 rather than trusting an unverifiable purchase.
+The Android app uses Google Play Billing Library 9.1, server-side verification through the Android Publisher API, server-side acknowledgement, account-bound purchase tokens, and automatic purchase restoration. Web01 never grants an entitlement from data supplied by the Android app alone.
+
+## Google Play service account
+
+1. In Play Console, finish the Google merchant payments profile first.
+2. Create a Google Cloud service account dedicated to ClearlySaid and enable the Google Play Android Developer API.
+3. Grant it only the Play Console permissions needed to view orders/subscriptions and manage subscription purchases.
+4. Store its JSON credential on Web01 at `/home/ken/clearlysaid/secrets/google-play-service-account.json` with mode `600`.
+5. Mount the file read-only into the web container. Set `GooglePlay__ServiceAccountJsonPath` to its container path and set `GooglePlay__PackageName=com.clearlysaid.app`.
+
+Never commit the JSON credential or include it in the Android app.
+
+## Website purchase links
+
+Google Play's Payments policy generally prohibits a Play-distributed app from directing users to a different payment method for digital subscriptions. Eligible developers may use external links only after enrolling in the applicable Google Play program and completing its technical, disclosure, reporting, and fee requirements.
+
+ClearlySaid therefore defaults `ClearlySaidExternalPurchaseLinksEnabled` to `false`. The app still shows the Free, Standard, and Pro plan comparison, but its purchase buttons say that purchases are coming soon. Do not enable the external website buttons in a Play upload until enrollment has been approved for every country included in that release.
+
+After approval, build the eligible release with:
+
+```powershell
+./scripts/Publish-Android-Release.ps1 -ExternalLinksProgramApproved
+```
+
+Website purchases must use the same ClearlySaid login. Stripe's verified webhook—not the mobile app or return URL—assigns the entitlement, and the user can select **Refresh plan** in the app afterward.
+
+Official policy references:
+
+- https://support.google.com/googleplay/android-developer/answer/10281818
+- https://support.google.com/googleplay/android-developer/answer/16470497

@@ -7,7 +7,7 @@ Web01 is the public Blazor application and mobile gateway. It does not store the
 - Host: Ubuntu at `10.168.168.8`
 - Runtime: Docker
 - Container: `clearlysaid-web`
-- Container image: `clearlysaid-web:20260803.3`
+- Container image: `clearlysaid-web:20260806.3`
 - Published port: `5102` to container port `8080`
 - Persistent volume: `clearlysaid-data`
 - Public URL: `https://clearlysaid.healthcareautomation.services`
@@ -48,6 +48,8 @@ docker run --detach \
 
 Do not configure `OPENAI_API_KEY` on Web01. The OpenAI key belongs only on API01.
 The environment file must contain `ConnectionStrings__ClearlySaid`; see `docs/PostgreSql-Setup.md`. Keep it readable only by its owner and never copy it into the image.
+
+Stripe web billing also belongs on Web01. Add the live secret key, webhook signing secret, and four recurring Price IDs to the same protected environment file. Never place Stripe secrets in `appsettings.json`, the MAUI app, API01, or the container image. See `docs/Subscription-Plans.md` for the exact variable names and webhook destination.
 
 To grant the first administrator, temporarily add the following to Web01's protected environment file and recreate the container:
 

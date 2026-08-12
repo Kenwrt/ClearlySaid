@@ -12,6 +12,7 @@ public sealed class Api01MessageRefinementService(
         string message,
         Guid requestId,
         Guid userId,
+        MessageStyleOptions? style,
         CancellationToken cancellationToken = default)
     {
         var serviceToken = configuration["CLEARLYSAID_INTERNAL_API_TOKEN"];
@@ -24,7 +25,7 @@ public sealed class Api01MessageRefinementService(
         var client = httpClientFactory.CreateClient("Api01");
         using var request = new HttpRequestMessage(HttpMethod.Post, "api/messages/refine")
         {
-            Content = JsonContent.Create(new RefineMessageRequest(message, requestId, userId))
+            Content = JsonContent.Create(new RefineMessageRequest(message, requestId, userId, style))
         };
         request.Headers.Add("X-ClearlySaid-Service-Token", serviceToken);
 

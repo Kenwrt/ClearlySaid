@@ -57,6 +57,7 @@ input { box-sizing: border-box; }
 .cs-admin-check { display: flex !important; grid-template-columns: auto 1fr; align-items: center; font-weight: 500 !important; }
 .cs-admin-check input { min-height: auto; }
 .cs-admin-notice { padding: .8rem 1rem; color: #126437; background: #e9f8ef; border-radius: 8px; }
+.cs-admin-hint { margin: -.25rem 0 .8rem; color: #687184; font-size: .9rem; line-height: 1.45; }
 .cs-admin-table-wrap { overflow-x: auto; }
 .cs-admin-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
 .cs-admin-table th, .cs-admin-table td { padding: .7rem; border-bottom: 1px solid #e4e7ee; text-align: left; vertical-align: top; }

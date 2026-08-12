@@ -2,8 +2,10 @@
 @implements IDisposable
 @inject IMessageRefinementService RefinementService
 @inject IAccountService AccountService
+@inject IBillingService BillingService
 @inject IDictationService DictationService
 @inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 <PageTitle>ClearlySaid</PageTitle>
 
@@ -46,7 +48,18 @@
         <section class="cs-account-summary" aria-label="Account and usage">
             <div>
                 <strong>@AccountService.CurrentAccount.Email</strong>
-                <span>@AccountService.CurrentAccount.Plan plan · @AccountService.CurrentAccount.Remaining of @AccountService.CurrentAccount.MonthlyAllowance messages remaining</span>
+                @if (AccountService.CurrentAccount.IsUnlimited)
+                {
+                    <span>Administrator · Unlimited messages</span>
+                }
+                else
+                {
+                    <span>@(SubscriptionPlans.Find(AccountService.CurrentAccount.Plan)?.DisplayName ?? AccountService.CurrentAccount.Plan) plan · @AccountService.CurrentAccount.Remaining of @AccountService.CurrentAccount.MonthlyAllowance messages remaining</span>
+                    @if (AccountService.CurrentAccount.Plan == SubscriptionPlans.Free)
+                    {
+                        <a class="cs-summary-upgrade" href="#plans">View plans</a>
+                    }
+                }
             </div>
             <div class="cs-account-actions">
                 @if (AccountService.CurrentAccount.Role == AccountRoles.Admin)
@@ -58,7 +71,81 @@
         </section>
     }
 
-    <section class="cs-compose" aria-labelledby="your-words-heading" aria-disabled="@(AccountService.CurrentAccount is null)">
+    @if (AccountService.CurrentAccount is { Role: not AccountRoles.Admin } account)
+    {
+        <section id="plans" class="cs-billing" aria-labelledby="billing-heading">
+            <div class="cs-billing-heading">
+                <div>
+                    <h2 id="billing-heading">Plans and billing</h2>
+                    <p>Choose the allowance that fits how often you use ClearlySaid.</p>
+                </div>
+                <div class="cs-billing-tools">
+                    <button class="cs-link-button" type="button" disabled="@isBillingBusy" @onclick="RefreshPlanAsync">
+                        Refresh plan
+                    </button>
+                    @if (BillingService.IsAvailable &&
+                         (string.Equals(account.SubscriptionProvider, "stripe", StringComparison.OrdinalIgnoreCase) ||
+                          string.Equals(account.SubscriptionProvider, "google", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        <button class="cs-link-button" type="button" disabled="@isBillingBusy" @onclick="ManageBillingAsync">
+                            Manage billing
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(billingNotice))
+            {
+                <p class="cs-billing-notice" role="status">@billingNotice</p>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(BillingService.AvailabilityMessage))
+            {
+                <p class="cs-billing-notice" role="status">@BillingService.AvailabilityMessage</p>
+            }
+
+            @if (account.Plan == SubscriptionPlans.Free)
+            {
+                <div class="cs-plan-grid">
+                    @foreach (var plan in SubscriptionPlans.All.Where(candidate => candidate.IsPurchasable))
+                    {
+                        <article class="cs-plan-card">
+                            <h3>@plan.DisplayName</h3>
+                            <strong>@plan.MonthlyAllowance.ToString("N0") messages / month</strong>
+                            <p>@plan.Description</p>
+                            <div class="cs-plan-actions">
+                                <button class="cs-button cs-button-primary" type="button"
+                                        disabled="@(isBillingBusy || !BillingService.IsAvailable)"
+                                        @onclick="() => StartCheckoutAsync(plan.Id, BillingIntervals.Monthly)">
+                                    @CheckoutLabel(plan.MonthlyPrice, "month")
+                                </button>
+                                <button class="cs-button cs-button-secondary" type="button"
+                                        disabled="@(isBillingBusy || !BillingService.IsAvailable)"
+                                        @onclick="() => StartCheckoutAsync(plan.Id, BillingIntervals.Annual)">
+                                    @CheckoutLabel(plan.AnnualPrice, "year")
+                                </button>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+            else if (!string.Equals(account.SubscriptionProvider, "stripe", StringComparison.OrdinalIgnoreCase))
+            {
+                <p class="cs-billing-notice">Your subscription is managed by @ProviderName(account.SubscriptionProvider).</p>
+            }
+        </section>
+    }
+
+    @if (AccountService.CurrentAccount is { IsUnlimited: false, Remaining: 0 })
+    {
+        <section class="cs-limit-callout" role="status" aria-labelledby="limit-heading">
+            <h2 id="limit-heading">Your messages will reset soon</h2>
+            <p>You have used this month’s allowance. Choose a plan above for more message improvements, or return after your allowance resets.</p>
+            <a class="cs-button cs-button-primary" href="#plans">Compare plans</a>
+        </section>
+    }
+
+    <section class="cs-compose" aria-labelledby="your-words-heading" aria-disabled="@(AccountService.CurrentAccount is null || IsOutOfMessages)">
         <div class="cs-compose-heading">
             <h2 id="your-words-heading">Your words</h2>
             @if (isListening)
@@ -70,21 +157,69 @@
         <label class="cs-sr-only" for="message-input">Your dictated or typed message</label>
         <textarea id="message-input"
                   maxlength="5000"
+                  spellcheck="true"
+                  autocorrect="on"
+                  autocapitalize="sentences"
+                  disabled="@(AccountService.CurrentAccount is null || IsOutOfMessages)"
                   placeholder="Tap the microphone and start speaking, or type here…"
                   @bind="message"
                   @bind:event="oninput"></textarea>
 
+        @if (HasMessageStyleControls)
+        {
+            <fieldset class="cs-style-controls">
+                <legend>Message style <span>Paid feature</span></legend>
+                <p>Optionally shape the rewrite without changing your facts.</p>
+                <div class="cs-style-grid">
+                    <label>
+                        Purpose
+                        <select @bind="selectedPurpose">
+                            @foreach (var option in MessageStyleCatalog.Purposes)
+                            {
+                                <option value="@option.Id">@option.Label</option>
+                            }
+                        </select>
+                    </label>
+                    <label>
+                        Tone
+                        <select @bind="selectedTone">
+                            @foreach (var option in MessageStyleCatalog.Tones)
+                            {
+                                <option value="@option.Id">@option.Label</option>
+                            }
+                        </select>
+                    </label>
+                    <label>
+                        Directness
+                        <select @bind="selectedDirectness">
+                            @foreach (var option in MessageStyleCatalog.DirectnessLevels)
+                            {
+                                <option value="@option.Id">@option.Label</option>
+                            }
+                        </select>
+                    </label>
+                </div>
+            </fieldset>
+        }
+
         <div class="cs-actions">
             <button class="cs-button cs-button-secondary"
                     type="button"
-                    disabled="@(isBusy || AccountService.CurrentAccount is null)"
+                    disabled="@(isBusy || AccountService.CurrentAccount is null || IsOutOfMessages)"
                     @onclick="ToggleDictationAsync">
                 <span aria-hidden="true">@(isListening ? "■" : "🎙")</span>
                 @(isListening ? "Stop" : "Dictate")
             </button>
+            <button class="cs-button cs-button-secondary"
+                    type="button"
+                    aria-label="Clear dictated and suggested text"
+                    disabled="@(!CanClear)"
+                    @onclick="ClearAsync">
+                Clear
+            </button>
             <button class="cs-button cs-button-primary"
                     type="button"
-                    disabled="@(isBusy || AccountService.CurrentAccount is null)"
+                    disabled="@(isBusy || AccountService.CurrentAccount is null || IsOutOfMessages)"
                     @onclick="RefineAsync">
                 @(isBusy ? "Improving…" : "Make it clear")
             </button>
@@ -117,9 +252,23 @@
     private bool copied;
     private bool showRegistration;
     private bool isAccountBusy;
+    private bool isBillingBusy;
+    private string billingNotice = string.Empty;
     private string email = string.Empty;
     private string password = string.Empty;
+    private string selectedPurpose = MessageStyleCatalog.PreservePurpose;
+    private string selectedTone = MessageStyleCatalog.PreserveTone;
+    private string selectedDirectness = MessageStyleCatalog.BalancedDirectness;
     private CancellationTokenSource? operationCancellation;
+    private bool IsOutOfMessages => AccountService.CurrentAccount is
+        { IsUnlimited: false, Remaining: 0 };
+    private bool CanClear =>
+        isListening || isBusy ||
+        !string.IsNullOrWhiteSpace(message) ||
+        !string.IsNullOrWhiteSpace(result) ||
+        !string.IsNullOrWhiteSpace(errorMessage);
+    private bool HasMessageStyleControls => AccountService.CurrentAccount is { } account &&
+        (account.IsUnlimited || account.Plan != SubscriptionPlans.Free);
 
     protected override void OnInitialized()
     {
@@ -139,6 +288,19 @@
         try
         {
             await AccountService.InitializeAsync();
+            if (BillingService.IsAvailable)
+            {
+                var query = Navigation.ToAbsoluteUri(Navigation.Uri).Query;
+                if (query.Contains("billing=success", StringComparison.OrdinalIgnoreCase))
+                {
+                    await AccountService.RefreshAsync();
+                    billingNotice = "Payment received. Your plan will update as soon as Stripe confirms the subscription.";
+                }
+                else if (query.Contains("billing=canceled", StringComparison.OrdinalIgnoreCase))
+                {
+                    billingNotice = "Checkout was canceled. Your current plan has not changed.";
+                }
+            }
         }
         catch (Exception exception)
         {
@@ -188,6 +350,69 @@
         result = string.Empty;
     }
 
+    private async Task StartCheckoutAsync(string plan, string interval)
+    {
+        await RunBillingAsync(() => BillingService.StartCheckoutAsync(plan, interval));
+    }
+
+    private async Task ManageBillingAsync()
+    {
+        await RunBillingAsync(() => BillingService.ManageBillingAsync());
+    }
+
+    private async Task RefreshPlanAsync()
+    {
+        try
+        {
+            isBillingBusy = true;
+            errorMessage = string.Empty;
+            await AccountService.RefreshAsync();
+            billingNotice = "Your subscription status is up to date.";
+        }
+        catch (Exception exception)
+        {
+            errorMessage = exception.Message;
+        }
+        finally
+        {
+            isBillingBusy = false;
+        }
+    }
+
+    private async Task RunBillingAsync(Func<Task> action)
+    {
+        try
+        {
+            isBillingBusy = true;
+            errorMessage = string.Empty;
+            billingNotice = string.Empty;
+            await action();
+        }
+        catch (Exception exception)
+        {
+            errorMessage = exception.Message;
+        }
+        finally
+        {
+            isBillingBusy = false;
+        }
+    }
+
+    private static string ProviderName(string? provider) => provider?.ToLowerInvariant() switch
+    {
+        "google" => "Google Play",
+        "apple" => "the Apple App Store",
+        "admin" => "ClearlySaid support",
+        _ => "your app store"
+    };
+
+    private string CheckoutLabel(decimal price, string period) => BillingService.CheckoutMode switch
+    {
+        BillingCheckoutMode.ExternalWebsite => $"Continue on website · ${price:0.00}/{period}",
+        BillingCheckoutMode.Unavailable => "Purchases coming soon",
+        _ => $"${price:0.00}/{period}"
+    };
+
     private void OnAccountChanged(object? sender, EventArgs e) =>
         _ = InvokeAsync(StateHasChanged);
 
@@ -223,6 +448,12 @@
 
     private async Task RefineAsync()
     {
+        if (IsOutOfMessages)
+        {
+            errorMessage = "You have reached this month’s message allowance. Choose a plan or wait for the allowance to reset.";
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(message))
         {
             errorMessage = "Dictate or type a message first.";
@@ -230,7 +461,9 @@
         }
 
         operationCancellation?.Cancel();
-        operationCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        operationCancellation?.Dispose();
+        var requestCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        operationCancellation = requestCancellation;
 
         try
         {
@@ -238,7 +471,17 @@
             copied = false;
             errorMessage = string.Empty;
             result = string.Empty;
-            result = await RefinementService.RefineAsync(message.Trim(), operationCancellation.Token);
+            var style = HasMessageStyleControls
+                ? new MessageStyleOptions(selectedPurpose, selectedTone, selectedDirectness)
+                : null;
+            result = await RefinementService.RefineAsync(
+                message.Trim(),
+                style,
+                requestCancellation.Token);
+        }
+        catch (OperationCanceledException) when (!ReferenceEquals(operationCancellation, requestCancellation))
+        {
+            // The user cleared the screen while this request was running.
         }
         catch (OperationCanceledException)
         {
@@ -250,8 +493,40 @@
         }
         finally
         {
-            isBusy = false;
+            if (ReferenceEquals(operationCancellation, requestCancellation))
+            {
+                operationCancellation = null;
+                requestCancellation.Dispose();
+                isBusy = false;
+            }
         }
+    }
+
+    private async Task ClearAsync()
+    {
+        var activeCancellation = operationCancellation;
+        operationCancellation = null;
+        activeCancellation?.Cancel();
+        activeCancellation?.Dispose();
+
+        try
+        {
+            if (isListening || DictationService.IsListening)
+            {
+                await DictationService.StopAsync();
+            }
+        }
+        catch
+        {
+            // Clearing should still succeed if speech recognition has already stopped.
+        }
+
+        isListening = false;
+        isBusy = false;
+        message = string.Empty;
+        result = string.Empty;
+        errorMessage = string.Empty;
+        copied = false;
     }
 
     private async Task CopyAsync()

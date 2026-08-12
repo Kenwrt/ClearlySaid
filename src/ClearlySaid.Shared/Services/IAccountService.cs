@@ -22,6 +22,39 @@ public interface IAccessTokenStore
     Task RemoveAsync();
 }
 
+public interface IBillingService
+{
+    bool IsAvailable { get; }
+    BillingCheckoutMode CheckoutMode { get; }
+    string? AvailabilityMessage { get; }
+    Task StartCheckoutAsync(string plan, string interval, CancellationToken cancellationToken = default);
+    Task ManageBillingAsync(CancellationToken cancellationToken = default);
+}
+
+public enum BillingCheckoutMode
+{
+    Unavailable,
+    Stripe,
+    ExternalWebsite,
+    AppStore
+}
+
+public sealed class UnavailableBillingService : IBillingService
+{
+    public bool IsAvailable => false;
+    public BillingCheckoutMode CheckoutMode => BillingCheckoutMode.Unavailable;
+    public string AvailabilityMessage => "Subscriptions are not available in this app build yet.";
+
+    public Task StartCheckoutAsync(
+        string plan,
+        string interval,
+        CancellationToken cancellationToken = default) =>
+        throw new AccountApiException("Purchases for this app are managed by your device's app store.");
+
+    public Task ManageBillingAsync(CancellationToken cancellationToken = default) =>
+        throw new AccountApiException("Billing management is not available on this device yet.");
+}
+
 public interface IAdminService
 {
     Task<IReadOnlyList<AdminUser>> GetUsersAsync(CancellationToken cancellationToken = default);

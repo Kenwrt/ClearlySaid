@@ -7,6 +7,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
     <NpgsqlVersion Condition="'$(NpgsqlVersion)' == ''">10.0.0</NpgsqlVersion>
+    <StripeVersion Condition="'$(StripeVersion)' == ''">50.4.0</StripeVersion>
+    <GoogleAndroidPublisherVersion Condition="'$(GoogleAndroidPublisherVersion)' == ''">1.75.0.4221</GoogleAndroidPublisherVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,6 +17,8 @@
 
   <ItemGroup>
     <PackageReference Include="Npgsql" Version="$(NpgsqlVersion)" />
+    <PackageReference Include="Stripe.net" Version="$(StripeVersion)" />
+    <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="$(GoogleAndroidPublisherVersion)" />
   </ItemGroup>
 
 </Project>

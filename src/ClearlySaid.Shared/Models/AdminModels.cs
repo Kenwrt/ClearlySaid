@@ -7,6 +7,9 @@ public sealed record AdminUser(
     string Plan,
     int MonthlyAllowance,
     int UsedThisPeriod,
+    string SubscriptionStatus,
+    string? SubscriptionProvider,
+    DateTimeOffset PeriodEndsAt,
     bool IsDisabled,
     DateTimeOffset CreatedAt);
 
@@ -14,14 +17,12 @@ public sealed record CreateAdminUserRequest(
     string Email,
     string Password,
     string Role,
-    string Plan,
-    int MonthlyAllowance);
+    string Plan);
 
 public sealed record UpdateAdminUserRequest(
     string Email,
     string Role,
     string Plan,
-    int MonthlyAllowance,
     bool IsDisabled);
 
 public sealed record ResetAdminPasswordRequest(string NewPassword);

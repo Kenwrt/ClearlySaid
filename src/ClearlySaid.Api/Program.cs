@@ -21,6 +21,7 @@ builder.Services.AddHttpClient("Ollama", client =>
 builder.Services.AddScoped<OllamaTextRefinementProvider>();
 builder.Services.AddScoped<OpenAiTextRefinementProvider>();
 builder.Services.AddScoped<ITextRefinementProvider, FallbackTextRefinementProvider>();
+builder.Services.AddHostedService<OllamaModelWarmupService>();
 
 var app = builder.Build();
 
@@ -62,6 +63,14 @@ app.MapPost("/api/messages/refine", async (
         });
     }
 
+    if (!MessageStyleCatalog.TryNormalize(request.Style, out var style))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            [nameof(request.Style)] = ["Select valid message style options."]
+        });
+    }
+
     if (request.RequestId is null || request.RequestId == Guid.Empty ||
         request.UserId is null || request.UserId == Guid.Empty)
     {
@@ -75,6 +84,7 @@ app.MapPost("/api/messages/refine", async (
     {
         var result = await refinementProvider.RefineAsync(
             request.Message,
+            style,
             request.RequestId.Value,
             cancellationToken);
         return Results.Ok(new RefineMessageResponse(

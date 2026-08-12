@@ -1,3 +1,5 @@
+using ClearlySaid.Shared.Models;
+
 namespace ClearlySaid.Api.Services;
 
 public sealed class FallbackTextRefinementProvider(
@@ -11,12 +13,13 @@ public sealed class FallbackTextRefinementProvider(
 
     public async Task<TextRefinementResult> RefineAsync(
         string text,
+        MessageStyleOptions? style,
         Guid requestId,
         CancellationToken cancellationToken)
     {
         try
         {
-            var result = await primary.RefineAsync(text, requestId, cancellationToken);
+            var result = await primary.RefineAsync(text, style, requestId, cancellationToken);
             logger.LogInformation(
                 "Refinement request {RequestId} completed with {Provider}/{Model} in {Latency} ms.",
                 requestId, result.Provider, result.Model, result.LatencyMilliseconds);
@@ -33,7 +36,7 @@ public sealed class FallbackTextRefinementProvider(
                 exception,
                 "Primary provider definitely failed request {RequestId}; using OpenAI fallback.",
                 requestId);
-            var result = await fallback.RefineAsync(text, requestId, cancellationToken);
+            var result = await fallback.RefineAsync(text, style, requestId, cancellationToken);
             logger.LogInformation(
                 "Refinement request {RequestId} completed with fallback {Provider}/{Model} in {Latency} ms.",
                 requestId, result.Provider, result.Model, result.LatencyMilliseconds);
