@@ -467,6 +467,7 @@ public sealed partial class ClearlySaidDatabase(
             JOIN clearlysaid_entitlements q ON q.user_id = u.id
             LEFT JOIN clearlysaid_usage_events e ON e.user_id = u.id
                  AND e.occurred_at >= q.period_started_at AND e.occurred_at < q.period_ends_at
+            WHERE u.normalized_email NOT LIKE 'DELETED-%'
             GROUP BY u.id, u.email, u.role, q.plan_id, q.monthly_allowance,
                      q.status, q.provider, q.period_ends_at, u.disabled_at, u.created_at
             ORDER BY u.created_at DESC;
