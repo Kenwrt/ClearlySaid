@@ -277,6 +277,8 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
             HttpStatusCode.Unauthorized => "Your session has expired. Please sign in again.",
             HttpStatusCode.Forbidden => "Administrator access is required.",
             HttpStatusCode.TooManyRequests => "You have reached your current usage limit.",
+            HttpStatusCode.BadGateway or HttpStatusCode.GatewayTimeout =>
+                "ClearlySaid took longer than expected. Please submit your message again.",
             _ => "ClearlySaid is temporarily unavailable. Please try again."
         });
     }

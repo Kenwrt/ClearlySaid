@@ -37,7 +37,7 @@ public sealed class Api01MessageRefinementService(
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             throw new Api01ServiceException(
-                "ClearlySaid's message service took too long to respond. Please try again.");
+                "ClearlySaid took longer than expected. Please submit your message again.");
         }
         catch (HttpRequestException)
         {
@@ -50,6 +50,13 @@ public sealed class Api01MessageRefinementService(
             if (!response.IsSuccessStatusCode)
             {
                 var detail = await TryReadProblemDetailAsync(response, cancellationToken);
+                if (response.StatusCode is System.Net.HttpStatusCode.RequestTimeout or
+                    System.Net.HttpStatusCode.GatewayTimeout)
+                {
+                    throw new Api01ServiceException(
+                        "ClearlySaid took longer than expected. Please submit your message again.");
+                }
+
                 if (response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable)
                 {
                     throw new Api01ConfigurationException(
