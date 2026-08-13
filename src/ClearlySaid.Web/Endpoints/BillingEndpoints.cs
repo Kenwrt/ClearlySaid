@@ -12,9 +12,26 @@ public static class BillingEndpoints
             .RequireRateLimiting("account");
         endpoints.MapPost("/api/billing/stripe/portal", CreatePortalAsync)
             .RequireRateLimiting("account");
+        endpoints.MapPost("/api/billing/stripe/cancel", CancelAsync)
+            .RequireRateLimiting("account");
         endpoints.MapPost("/api/billing/stripe/webhook", ProcessWebhookAsync)
             .DisableAntiforgery();
         return endpoints;
+    }
+
+    private static async Task<IResult> CancelAsync(HttpRequest request, ClearlySaidDatabase database,
+        StripeBillingService billing, TransactionalEmailService email, CancellationToken cancellationToken)
+    {
+        var user = await AccountEndpoints.AuthenticateAsync(request, database, cancellationToken);
+        if (user is null) return Results.Unauthorized();
+        try
+        {
+            var endsAt = await billing.CancelAtPeriodEndAsync(user, cancellationToken);
+            await email.SendCancellationAsync(user.Email, endsAt, cancellationToken);
+            return Results.Ok(new CancelSubscriptionResponse("Your subscription will not renew.", endsAt));
+        }
+        catch (StripeBillingRequestException ex) { return Results.Problem(ex.Message, statusCode: 400); }
+        catch (StripeBillingConfigurationException ex) { return Results.Problem(ex.Message, statusCode: 503); }
     }
 
     private static async Task<IResult> CreateCheckoutAsync(

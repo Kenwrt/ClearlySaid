@@ -2,7 +2,7 @@
 set -euo pipefail
 
 base_url="${1:-http://127.0.0.1:5104}"
-host_header="${2:-clearlysaid.healthcareautomation.services}"
+host_header="${2:-clearlysaid.ai}"
 email="release-smoke-$(date +%s)@example.invalid"
 password="ReleaseSmoke-$(openssl rand -hex 12)-A1"
 token=""

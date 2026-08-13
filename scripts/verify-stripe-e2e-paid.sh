@@ -2,7 +2,7 @@
 set -euo pipefail
 
 base_url="http://127.0.0.1:5102"
-host_header="Host: clearlysaid.healthcareautomation.services"
+host_header="Host: clearlysaid.ai"
 state_file="/home/ken/clearlysaid/secrets/stripe-e2e-test.env"
 result_file="/home/ken/clearlysaid/secrets/stripe-e2e-result.env"
 

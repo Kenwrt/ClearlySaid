@@ -2,7 +2,7 @@
 
 Web01 exposes the testing package at:
 
-`https://clearlysaid.healthcareautomation.services/downloads/ClearlySaid-Android-Test.apk`
+`https://clearlysaid.ai/downloads/ClearlySaid-Android-Test.apk`
 
 The web application also displays an Android testing download banner beneath the main application.
 

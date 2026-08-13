@@ -43,6 +43,18 @@ public sealed class StripeWebBillingService(
     public Task ManageBillingAsync(CancellationToken cancellationToken = default) =>
         RedirectAsync("api/billing/stripe/portal", body: null, cancellationToken);
 
+    public async Task<CancelSubscriptionResponse> CancelSubscriptionAsync(CancellationToken cancellationToken = default)
+    {
+        var token = await tokenStore.GetAsync();
+        if (string.IsNullOrWhiteSpace(token)) throw new AccountApiException("Sign in before canceling a subscription.");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "api/billing/stripe/cancel");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using var response = await httpClientFactory.CreateClient("Public").SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode) throw new AccountApiException(await ReadProblemAsync(response, cancellationToken));
+        return await response.Content.ReadFromJsonAsync<CancelSubscriptionResponse>(cancellationToken)
+            ?? throw new AccountApiException("ClearlySaid did not confirm the cancellation.");
+    }
+
     private async Task RedirectAsync(
         string uri,
         object? body,

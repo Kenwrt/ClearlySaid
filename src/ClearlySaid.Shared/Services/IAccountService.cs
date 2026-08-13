@@ -9,7 +9,11 @@ public interface IAccountService
     event EventHandler? AccountChanged;
     Task InitializeAsync(CancellationToken cancellationToken = default);
     Task LoginAsync(string email, string password, CancellationToken cancellationToken = default);
-    Task RegisterAsync(string email, string password, CancellationToken cancellationToken = default);
+    Task<string> RegisterAsync(string email, string password, CancellationToken cancellationToken = default);
+    Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken = default);
+    Task ResetPasswordAsync(string token, string password, CancellationToken cancellationToken = default);
+    Task VerifyEmailAsync(string token, CancellationToken cancellationToken = default);
+    Task ResendVerificationAsync(string email, CancellationToken cancellationToken = default);
     Task RefreshAsync(CancellationToken cancellationToken = default);
     Task LogoutAsync(CancellationToken cancellationToken = default);
     Task DeleteAccountAsync(CancellationToken cancellationToken = default);
@@ -29,6 +33,7 @@ public interface IBillingService
     string? AvailabilityMessage { get; }
     Task StartCheckoutAsync(string plan, string interval, CancellationToken cancellationToken = default);
     Task ManageBillingAsync(CancellationToken cancellationToken = default);
+    Task<CancelSubscriptionResponse> CancelSubscriptionAsync(CancellationToken cancellationToken = default);
 }
 
 public enum BillingCheckoutMode
@@ -53,6 +58,9 @@ public sealed class UnavailableBillingService : IBillingService
 
     public Task ManageBillingAsync(CancellationToken cancellationToken = default) =>
         throw new AccountApiException("Billing management is not available on this device yet.");
+
+    public Task<CancelSubscriptionResponse> CancelSubscriptionAsync(CancellationToken cancellationToken = default) =>
+        throw new AccountApiException("Subscription cancellation is managed by your device's app store.");
 }
 
 public interface IAdminService

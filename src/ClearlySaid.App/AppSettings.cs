@@ -2,9 +2,9 @@ namespace ClearlySaid.App;
 
 public static class AppSettings
 {
-    public const string ServerBaseUrl = "https://clearlysaid.healthcareautomation.services/";
+    public const string ServerBaseUrl = "https://clearlysaid.ai/";
     public const string SubscriptionWebsiteUrl =
-        "https://clearlysaid.healthcareautomation.services/?upgrade=1";
+        "https://clearlysaid.ai/?upgrade=1";
 
 #if CLEARLYSAID_EXTERNAL_PURCHASE_LINKS
     public const bool ExternalPurchaseLinksEnabled = true;

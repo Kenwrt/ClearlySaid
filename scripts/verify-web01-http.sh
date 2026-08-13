@@ -2,12 +2,12 @@
 set -euo pipefail
 
 health_code="$(curl --silent --output /dev/null --write-out '%{http_code}' \
-  --header 'Host: clearlysaid.healthcareautomation.services' \
+  --header 'Host: clearlysaid.ai' \
   http://127.0.0.1:5102/health)"
 
 webhook_code="$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST \
-  --header 'Host: clearlysaid.healthcareautomation.services' \
+  --header 'Host: clearlysaid.ai' \
   --header 'Stripe-Signature: invalid' \
   --header 'Content-Type: application/json' \
   --data '{}' \

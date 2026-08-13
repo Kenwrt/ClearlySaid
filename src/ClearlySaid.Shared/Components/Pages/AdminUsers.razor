@@ -39,19 +39,36 @@
 
             @if (selectedId is not null)
             {
-                <div class="cs-admin-card">
-                    <h2>Edit user</h2>
-                    <label>Email<input type="email" @bind="editEmail" /></label>
-                    <label>Role<select @bind="editRole"><option value="User">User</option><option value="Admin">Admin</option></select></label>
-                    <label>Subscription plan<select @bind="editPlan">@foreach (var plan in SubscriptionPlans.All) { <option value="@plan.Id">@plan.DisplayName (@plan.MonthlyAllowance.ToString("N0") / month)</option> }</select></label>
-                    <p class="cs-admin-hint">Effective allowance: @(editRole == AccountRoles.Admin ? "Unlimited" : SubscriptionPlans.GetRequired(editPlan).MonthlyAllowance.ToString("N0"))</p>
-                    <label class="cs-admin-check"><input type="checkbox" @bind="editDisabled" /> Disabled</label>
-                    <button class="cs-button cs-button-primary" disabled="@busy" @onclick="SaveAsync">Save changes</button>
-                    <hr />
-                    <label>New password<input type="password" autocomplete="new-password" @bind="resetPassword" /></label>
-                    <button class="cs-button cs-button-secondary" disabled="@busy" @onclick="ResetPasswordAsync">Reset password and revoke sessions</button>
-                    <label class="cs-admin-check"><input type="checkbox" @bind="confirmDelete" /> Confirm permanent anonymization</label>
-                    <button class="cs-danger-button" disabled="@(busy || !confirmDelete || selectedId == AccountService.CurrentAccount?.Id)" @onclick="DeleteAsync">Delete user</button>
+                <div class="cs-admin-user-actions">
+                    <div class="cs-admin-card">
+                        <h2>Edit account details</h2>
+                        <p class="cs-admin-section-copy">Change the user’s email, access role, plan, or account status. This does not change their password.</p>
+                        <label>Email<input type="email" @bind="editEmail" /></label>
+                        <label>Role<select @bind="editRole"><option value="User">User</option><option value="Admin">Admin</option></select></label>
+                        <label>Subscription plan<select @bind="editPlan">@foreach (var plan in SubscriptionPlans.All) { <option value="@plan.Id">@plan.DisplayName (@plan.MonthlyAllowance.ToString("N0") / month)</option> }</select></label>
+                        <p class="cs-admin-hint">Effective allowance: @(editRole == AccountRoles.Admin ? "Unlimited" : SubscriptionPlans.GetRequired(editPlan).MonthlyAllowance.ToString("N0"))</p>
+                        <label class="cs-admin-check"><input type="checkbox" @bind="editDisabled" /> Disable account access</label>
+                        <button class="cs-button cs-button-primary" disabled="@busy" @onclick="SaveAsync">Save account details</button>
+                    </div>
+
+                    <div class="cs-admin-card cs-admin-security-card">
+                        <h2>Reset password</h2>
+                        <p class="cs-admin-section-copy">Set a temporary password only when helping this user recover access. All of their current sessions will be signed out.</p>
+                        <label>Temporary password<input type="password" autocomplete="new-password" @bind="resetPassword" /></label>
+                        <p class="cs-admin-hint">Use at least 12 characters with uppercase, lowercase, and a number.</p>
+                        <button class="cs-button cs-button-secondary" disabled="@(busy || string.IsNullOrWhiteSpace(resetPassword))" @onclick="ResetPasswordAsync">Set temporary password and sign out sessions</button>
+                    </div>
+
+                    <div class="cs-admin-card cs-admin-danger-zone">
+                        <h2>Delete account</h2>
+                        <p class="cs-admin-section-copy">Permanently disables this account, anonymizes its identity, and revokes its sessions. This cannot be undone.</p>
+                        <label class="cs-admin-check"><input type="checkbox" @bind="confirmDelete" /> I understand this permanently anonymizes the user</label>
+                        <button class="cs-danger-button" disabled="@(busy || !confirmDelete || selectedId == AccountService.CurrentAccount?.Id)" @onclick="DeleteAsync">Permanently delete user</button>
+                        @if (selectedId == AccountService.CurrentAccount?.Id)
+                        {
+                            <p class="cs-admin-hint">You cannot delete the account you are currently using.</p>
+                        }
+                    </div>
                 </div>
             }
         </section>

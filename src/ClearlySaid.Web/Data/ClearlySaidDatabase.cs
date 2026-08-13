@@ -7,7 +7,7 @@ using NpgsqlTypes;
 
 namespace ClearlySaid.Web.Data;
 
-public sealed class ClearlySaidDatabase(
+public sealed partial class ClearlySaidDatabase(
     IConfiguration configuration,
     IPasswordHasher<UserCredential> passwordHasher,
     ILogger<ClearlySaidDatabase> logger)
@@ -44,7 +44,7 @@ public sealed class ClearlySaidDatabase(
         logger.LogInformation("ClearlySaid PostgreSQL schema is ready.");
     }
 
-    public async Task<AuthResponse?> RegisterAsync(
+    public async Task<PendingRegistration?> RegisterAsync(
         string email,
         string password,
         CancellationToken cancellationToken)
@@ -61,8 +61,8 @@ public sealed class ClearlySaidDatabase(
             {
                 command.Transaction = transaction;
                 command.CommandText = """
-                    INSERT INTO clearlysaid_users (id, email, normalized_email, password_hash)
-                    VALUES (@id, @email, @normalizedEmail, @passwordHash);
+                    INSERT INTO clearlysaid_users (id, email, normalized_email, password_hash, email_verified_at)
+                    VALUES (@id, @email, @normalizedEmail, @passwordHash, NULL);
                     INSERT INTO clearlysaid_entitlements
                         (user_id, plan_id, monthly_allowance, status, provider, period_started_at, period_ends_at)
                     VALUES (@id, 'free', @allowance, 'active', 'system', date_trunc('month', now()), date_trunc('month', now()) + interval '1 month');
@@ -75,10 +75,8 @@ public sealed class ClearlySaidDatabase(
                 await command.ExecuteNonQueryAsync(cancellationToken);
             }
 
-            var session = await CreateSessionAsync(connection, transaction, user.Id, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            var account = await GetAccountAsync(user.Id, cancellationToken);
-            return new AuthResponse(session.Token, session.ExpiresAt, account);
+            return new PendingRegistration(user.Id, email.Trim());
         }
         catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.UniqueViolation)
         {
@@ -97,7 +95,7 @@ public sealed class ClearlySaidDatabase(
         command.CommandText = """
             SELECT id, normalized_email, password_hash
             FROM clearlysaid_users
-            WHERE normalized_email = @email AND disabled_at IS NULL;
+            WHERE normalized_email = @email AND disabled_at IS NULL AND email_verified_at IS NOT NULL;
             """;
         command.Parameters.AddWithValue("email", NormalizeEmail(email));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -177,6 +175,19 @@ public sealed class ClearlySaidDatabase(
             WHERE user_id = @userId AND provider = 'stripe' AND customer_reference IS NOT NULL
             ORDER BY updated_at DESC
             LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("userId", userId);
+        return await command.ExecuteScalarAsync(cancellationToken) as string;
+    }
+
+    public async Task<string?> GetStripeSubscriptionReferenceAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT provider_reference FROM clearlysaid_billing_subscriptions
+            WHERE user_id = @userId AND provider = 'stripe' AND status IN ('active','trialing','past_due')
+            ORDER BY updated_at DESC LIMIT 1;
             """;
         command.Parameters.AddWithValue("userId", userId);
         return await command.ExecuteScalarAsync(cancellationToken) as string;
@@ -846,6 +857,18 @@ public sealed class ClearlySaidDatabase(
             disabled_at timestamptz NULL
         );
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'User';
+        ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS email_verified_at timestamptz NULL DEFAULT now();
+        CREATE TABLE IF NOT EXISTS clearlysaid_account_tokens (
+            id uuid PRIMARY KEY,
+            user_id uuid NOT NULL REFERENCES clearlysaid_users(id) ON DELETE CASCADE,
+            purpose text NOT NULL,
+            token_hash bytea NOT NULL UNIQUE,
+            expires_at timestamptz NOT NULL,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            consumed_at timestamptz NULL
+        );
+        CREATE INDEX IF NOT EXISTS ix_clearlysaid_account_tokens_user_purpose
+            ON clearlysaid_account_tokens(user_id, purpose, created_at DESC);
         CREATE TABLE IF NOT EXISTS clearlysaid_entitlements (
             user_id uuid PRIMARY KEY REFERENCES clearlysaid_users(id) ON DELETE CASCADE,
             plan_id text NOT NULL,
@@ -948,6 +971,7 @@ public sealed class ClearlySaidDatabase(
 
 public sealed record UserCredential(Guid Id, string NormalizedEmail);
 public sealed record AuthenticatedUser(Guid Id, string Email, string Role);
+public sealed record PendingRegistration(Guid Id, string Email);
 public sealed record UsageReservation(long? UsageId, bool Duplicate);
 
 public sealed record BillingSubscriptionUpdate(

@@ -63,7 +63,7 @@ Stripe__AutomaticTaxEnabled=false
 The webhook destination is:
 
 ```text
-https://clearlysaid.healthcareautomation.services/api/billing/stripe/webhook
+https://clearlysaid.ai/api/billing/stripe/webhook
 ```
 
 Subscribe it to `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`.

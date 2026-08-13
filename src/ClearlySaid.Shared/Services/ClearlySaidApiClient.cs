@@ -33,11 +33,31 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
         await CompleteAuthenticationAsync(response, cancellationToken);
     }
 
-    public async Task RegisterAsync(string email, string password, CancellationToken cancellationToken = default)
+    public async Task<string> RegisterAsync(string email, string password, CancellationToken cancellationToken = default)
     {
         var response = await httpClient.PostAsJsonAsync(
             "api/account/register", new RegisterRequest(email, password), cancellationToken);
-        await CompleteAuthenticationAsync(response, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<RegistrationResponse>(cancellationToken))?.Message
+            ?? "Check your email to activate your ClearlySaid account.";
+    }
+
+    public Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken = default) =>
+        PostAccountActionAsync("api/account/password/forgot", new EmailRequest(email), cancellationToken);
+
+    public Task ResetPasswordAsync(string token, string password, CancellationToken cancellationToken = default) =>
+        PostAccountActionAsync("api/account/password/reset", new PasswordResetRequest(token, password), cancellationToken);
+
+    public Task VerifyEmailAsync(string token, CancellationToken cancellationToken = default) =>
+        PostAccountActionAsync("api/account/email/verify", new TokenRequest(token), cancellationToken);
+
+    public Task ResendVerificationAsync(string email, CancellationToken cancellationToken = default) =>
+        PostAccountActionAsync("api/account/email/resend", new EmailRequest(email), cancellationToken);
+
+    private async Task PostAccountActionAsync(string uri, object body, CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.PostAsJsonAsync(uri, body, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
     }
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)

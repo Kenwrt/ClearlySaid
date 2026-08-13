@@ -31,10 +31,10 @@ Say it naturally. Send it clearly.
 ## Category and contact
 
 - Category: Productivity
-- Support email: support@healthcareautomation.services
-- Website: https://clearlysaid.healthcareautomation.services
-- Privacy policy: https://clearlysaid.healthcareautomation.services/privacy
-- Account deletion: https://clearlysaid.healthcareautomation.services/account/delete
+- Support email: support@clearlysaid.ai
+- Website: https://clearlysaid.ai
+- Privacy policy: https://clearlysaid.ai/privacy
+- Account deletion: https://clearlysaid.ai/account/delete
 
 ## Graphics
 

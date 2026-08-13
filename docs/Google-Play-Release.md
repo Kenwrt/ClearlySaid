@@ -35,7 +35,7 @@ Upload the generated `.aab`, never the debug testing APK. Increment `Application
 ## Store and policy material
 
 - Publish `/privacy` and `/account/delete` from the public ClearlySaid site.
-- Verify that `support@healthcareautomation.services` is a working monitored address.
+- Verify that `support@clearlysaid.ai` is a working monitored address.
 - Complete Data Safety, content rating, target audience, ads, app-access, microphone, and subscription declarations.
 - Provide 512×512 icon, 1024×500 feature graphic, phone screenshots, and store descriptions.
 

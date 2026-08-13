@@ -2,8 +2,8 @@
 set -euo pipefail
 
 base_url="http://127.0.0.1:5102"
-host_header="Host: clearlysaid.healthcareautomation.services"
-test_email="stripe-e2e-20260810@healthcareautomation.services"
+host_header="Host: clearlysaid.ai"
+test_email="stripe-e2e-20260810@clearlysaid.ai"
 test_password="$(openssl rand -base64 24 | tr -d '\n')Aa1"
 state_file="/home/ken/clearlysaid/secrets/stripe-e2e-test.env"
 checkout_file="/home/ken/clearlysaid/secrets/stripe-e2e-checkout.url"

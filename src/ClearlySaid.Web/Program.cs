@@ -36,6 +36,7 @@ builder.Services.AddSingleton<IPasswordHasher<UserCredential>, PasswordHasher<Us
 builder.Services.AddSingleton<ClearlySaidDatabase>();
 builder.Services.AddSingleton<StripeBillingService>();
 builder.Services.AddSingleton<GooglePlayBillingService>();
+builder.Services.AddSingleton<TransactionalEmailService>();
 builder.Services.AddScoped<IAccessTokenStore, BrowserAccessTokenStore>();
 builder.Services.AddScoped<ClearlySaidApiClient>(services => new ClearlySaidApiClient(
     services.GetRequiredService<IHttpClientFactory>().CreateClient("Public"),
@@ -49,8 +50,13 @@ builder.Services.AddSingleton<ActiveRefinementRequests>();
 builder.Services.AddScoped<IDictationService, BrowserDictationService>();
 builder.Services.AddHttpClient("Public", client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["PublicBaseUrl"] ?? "https://clearlysaid.healthcareautomation.services/");
+    client.BaseAddress = new Uri(builder.Configuration["PublicBaseUrl"] ?? "https://clearlysaid.ai/");
     client.Timeout = TimeSpan.FromSeconds(35);
+});
+builder.Services.AddHttpClient("Resend", client =>
+{
+    client.BaseAddress = new Uri("https://api.resend.com/");
+    client.Timeout = TimeSpan.FromSeconds(20);
 });
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {

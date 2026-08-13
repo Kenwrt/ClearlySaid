@@ -54,7 +54,7 @@ iOS builds must run on or connect to a Mac:
 dotnet run --project src/ClearlySaid.App -f net10.0-ios
 ```
 
-The mobile app calls `https://clearlysaid.healthcareautomation.services/`, configured in `src/ClearlySaid.App/AppSettings.cs`.
+The mobile app calls `https://clearlysaid.ai/`, configured in `src/ClearlySaid.App/AppSettings.cs`.
 
 ## Android testing download
 
@@ -64,7 +64,7 @@ Generate the signed testing APK with `scripts/Publish-Android-Test.ps1`, then pu
 
 1. Deploy the private service using `docs/Api01-Deployment.md` and `scripts/Publish-Api01.ps1`.
 2. Deploy the public application using `docs/Web01-Deployment.md` and `scripts/Publish-Web01.ps1`.
-3. The existing `WB-HyperV` Cloudflare Tunnel routes `clearlysaid.healthcareautomation.services` to Nginx Proxy Manager on Web01 (`10.168.168.8`), which forwards to the ClearlySaid container on Web01 (`10.168.168.8:5102`).
+3. The existing `WB-HyperV` Cloudflare Tunnel routes `clearlysaid.ai` to Nginx Proxy Manager on Web01 (`10.168.168.8`), which forwards to the ClearlySaid container on Web01 (`10.168.168.8:5102`). The legacy hostname remains available during the mobile-app migration window.
 4. Put only `OPENAI_API_KEY` on API01, and configure `Ollama__BaseUrl` and `Ollama__Model` there.
 5. Put the same `CLEARLYSAID_INTERNAL_API_TOKEN` on both servers.
 6. Restrict API01 inbound HTTPS to Web01's internal IP.

@@ -11,6 +11,10 @@ public static class AccountEndpoints
     {
         endpoints.MapPost("/api/account/register", RegisterAsync).RequireRateLimiting("account");
         endpoints.MapPost("/api/account/login", LoginAsync).RequireRateLimiting("account");
+        endpoints.MapPost("/api/account/email/verify", VerifyEmailAsync).RequireRateLimiting("account");
+        endpoints.MapPost("/api/account/email/resend", ResendVerificationAsync).RequireRateLimiting("account");
+        endpoints.MapPost("/api/account/password/forgot", ForgotPasswordAsync).RequireRateLimiting("account");
+        endpoints.MapPost("/api/account/password/reset", ResetPasswordAsync).RequireRateLimiting("account");
         endpoints.MapGet("/api/account/me", GetAccountAsync);
         endpoints.MapPost("/api/account/logout", LogoutAsync);
         endpoints.MapDelete("/api/account", DeleteAccountAsync);
@@ -22,6 +26,7 @@ public static class AccountEndpoints
     private static async Task<IResult> RegisterAsync(
         RegisterRequest request,
         ClearlySaidDatabase database,
+        TransactionalEmailService emailService,
         CancellationToken cancellationToken)
     {
         if (!IsValidEmail(request.Email))
@@ -37,9 +42,45 @@ public static class AccountEndpoints
         }
 
         var result = await database.RegisterAsync(request.Email, request.Password, cancellationToken);
-        return result is null
-            ? Results.Problem("An account with that email already exists.", statusCode: StatusCodes.Status409Conflict)
-            : Results.Ok(result);
+        if (result is null)
+            return Results.Problem("An account with that email already exists.", statusCode: StatusCodes.Status409Conflict);
+        var activation = await database.CreateAccountTokenAsync(result.Email, "verify_email", TimeSpan.FromHours(24), true, cancellationToken);
+        await emailService.SendVerificationAsync(result.Email, activation.Token, cancellationToken);
+        return Results.Accepted(value: new RegistrationResponse("Check your email to activate your ClearlySaid account."));
+    }
+
+    private static async Task<IResult> VerifyEmailAsync(TokenRequest request, ClearlySaidDatabase database,
+        TransactionalEmailService emailService, CancellationToken cancellationToken)
+    {
+        var email = await database.VerifyEmailAsync(request.Token, cancellationToken);
+        if (email is null) return Results.Problem("This activation link is invalid or expired.", statusCode: 400);
+        await emailService.SendWelcomeAsync(email, cancellationToken);
+        return Results.Ok();
+    }
+
+    private static async Task<IResult> ResendVerificationAsync(EmailRequest request, ClearlySaidDatabase database,
+        TransactionalEmailService emailService, CancellationToken cancellationToken)
+    {
+        var activation = await database.CreateAccountTokenAsync(request.Email, "verify_email", TimeSpan.FromHours(24), true, cancellationToken);
+        if (activation.UserId != Guid.Empty) await emailService.SendVerificationAsync(request.Email.Trim(), activation.Token, cancellationToken);
+        return Results.Ok();
+    }
+
+    private static async Task<IResult> ForgotPasswordAsync(EmailRequest request, ClearlySaidDatabase database,
+        TransactionalEmailService emailService, CancellationToken cancellationToken)
+    {
+        var reset = await database.CreateAccountTokenAsync(request.Email, "password_reset", TimeSpan.FromMinutes(30), false, cancellationToken);
+        if (reset.UserId != Guid.Empty) await emailService.SendPasswordResetAsync(request.Email.Trim(), reset.Token, cancellationToken);
+        return Results.Ok();
+    }
+
+    private static async Task<IResult> ResetPasswordAsync(PasswordResetRequest request, ClearlySaidDatabase database,
+        CancellationToken cancellationToken)
+    {
+        if (!IsValidPassword(request.Password))
+            return Results.Problem("Use at least 12 characters, including an uppercase letter, lowercase letter, and number.", statusCode: 400);
+        return await database.ResetPasswordWithTokenAsync(request.Token, request.Password, cancellationToken)
+            ? Results.Ok() : Results.Problem("This password-reset link is invalid or expired.", statusCode: 400);
     }
 
     private static async Task<IResult> LoginAsync(

@@ -8,6 +8,7 @@ namespace ClearlySaid.Web.Services;
 public sealed class StripeBillingService(
     IConfiguration configuration,
     ClearlySaidDatabase database,
+    TransactionalEmailService emailService,
     ILogger<StripeBillingService> logger)
 {
     private const string UserMetadataKey = "clearlysaid_user_id";
@@ -102,6 +103,16 @@ public sealed class StripeBillingService(
         return RequireStripeUrl(session.Url);
     }
 
+    public async Task<DateTimeOffset?> CancelAtPeriodEndAsync(AuthenticatedUser user, CancellationToken cancellationToken)
+    {
+        var subscriptionId = await database.GetStripeSubscriptionReferenceAsync(user.Id, cancellationToken);
+        if (string.IsNullOrWhiteSpace(subscriptionId))
+            throw new StripeBillingRequestException("No active ClearlySaid web subscription was found.");
+        var subscription = await new SubscriptionService(CreateClient()).UpdateAsync(
+            subscriptionId, new SubscriptionUpdateOptions { CancelAtPeriodEnd = true }, cancellationToken: cancellationToken);
+        return subscription.Items.Data.OrderByDescending(item => item.CurrentPeriodEnd).FirstOrDefault()?.CurrentPeriodEnd;
+    }
+
     public async Task ProcessWebhookAsync(
         string payload,
         string signature,
@@ -144,6 +155,26 @@ public sealed class StripeBillingService(
                 }
                 break;
         }
+
+        if (stripeEvent.Type == "invoice.paid")
+            await SendInvoiceSummaryAsync(payload, cancellationToken);
+    }
+
+    private async Task SendInvoiceSummaryAsync(string payload, CancellationToken cancellationToken)
+    {
+        using var json = System.Text.Json.JsonDocument.Parse(payload);
+        var invoice = json.RootElement.GetProperty("data").GetProperty("object");
+        var customerId = invoice.TryGetProperty("customer", out var customer) ? customer.GetString() : null;
+        if (string.IsNullOrWhiteSpace(customerId)) return;
+        var userId = await database.FindUserIdByStripeCustomerAsync(customerId, cancellationToken);
+        if (userId is null) return;
+        var account = await database.GetAccountAsync(userId.Value, cancellationToken);
+        var amount = invoice.TryGetProperty("amount_paid", out var amountPaid) ? amountPaid.GetInt64() : 0;
+        var currency = invoice.TryGetProperty("currency", out var currencyValue) ? currencyValue.GetString() ?? "usd" : "usd";
+        var receipt = invoice.TryGetProperty("hosted_invoice_url", out var receiptValue) ? receiptValue.GetString() : null;
+        var start = invoice.TryGetProperty("period_start", out var startValue) ? DateTimeOffset.FromUnixTimeSeconds(startValue.GetInt64()) : DateTimeOffset.UtcNow;
+        var end = invoice.TryGetProperty("period_end", out var endValue) ? DateTimeOffset.FromUnixTimeSeconds(endValue.GetInt64()) : account.PeriodEndsAt;
+        await emailService.SendBillingSummaryAsync(account.Email, account.Plan, amount, currency, start, end, receipt, cancellationToken);
     }
 
     private async Task ApplySubscriptionAsync(
@@ -224,7 +255,7 @@ public sealed class StripeBillingService(
     private string GetPublicBaseUrl()
     {
         var configured = configuration["PublicBaseUrl"]
-            ?? "https://clearlysaid.healthcareautomation.services/";
+            ?? "https://clearlysaid.ai/";
         if (!Uri.TryCreate(configured, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
         {
             throw new StripeBillingConfigurationException("PublicBaseUrl must be an absolute HTTPS URL.");

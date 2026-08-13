@@ -4,6 +4,14 @@ public sealed record RegisterRequest(string Email, string Password);
 
 public sealed record LoginRequest(string Email, string Password);
 
+public sealed record EmailRequest(string Email);
+
+public sealed record TokenRequest(string Token);
+
+public sealed record PasswordResetRequest(string Token, string Password);
+
+public sealed record RegistrationResponse(string Message);
+
 public sealed record AuthResponse(string AccessToken, DateTimeOffset ExpiresAt, AccountInfo Account);
 
 public sealed record AccountInfo(
@@ -83,3 +91,5 @@ public static class BillingIntervals
 public sealed record StripeCheckoutRequest(string Plan, string Interval);
 
 public sealed record BillingRedirectResponse(string Url);
+
+public sealed record CancelSubscriptionResponse(string Message, DateTimeOffset? AccessEndsAt);

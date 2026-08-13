@@ -10,7 +10,7 @@ Web01 is the public Blazor application and mobile gateway. It does not store the
 - Container image: `clearlysaid-web:20260806.3`
 - Published port: `5102` to container port `8080`
 - Persistent volume: `clearlysaid-data`
-- Public URL: `https://clearlysaid.healthcareautomation.services`
+- Public URL: `https://clearlysaid.ai`
 
 The existing `WB-HyperV` Cloudflare Tunnel sends the public hostname to Nginx Proxy Manager at `http://10.168.168.8:80`. Nginx Proxy Manager forwards it to `http://10.168.168.8:5102` with WebSocket support enabled.
 
@@ -64,9 +64,9 @@ The `/admin/diagnostics` console displays provider, model, request size, latency
 ## Validate
 
 ```bash
-curl --header 'Host: clearlysaid.healthcareautomation.services' http://127.0.0.1:5102/health
-curl https://clearlysaid.healthcareautomation.services/health
-curl -L https://clearlysaid.healthcareautomation.services/downloads/ClearlySaid-Android-Test.apk | sha256sum
+curl --header 'Host: clearlysaid.ai' http://127.0.0.1:5102/health
+curl https://clearlysaid.ai/health
+curl -L https://clearlysaid.ai/downloads/ClearlySaid-Android-Test.apk | sha256sum
 ```
 
 The health response should identify `ClearlySaid`, and the APK checksum should equal the adjacent `.sha256` file.

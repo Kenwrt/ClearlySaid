@@ -107,6 +107,12 @@ public sealed class GooglePlayBillingService : IBillingService, IDisposable
         }
     }
 
+    public async Task<CancelSubscriptionResponse> CancelSubscriptionAsync(CancellationToken cancellationToken = default)
+    {
+        await ManageBillingAsync(cancellationToken);
+        return new("Use Google Play to confirm cancellation.", null);
+    }
+
     private async Task<(BillingResult Result, IList<ProductDetails> ProductDetails)> QueryProductDetailsAsync(
         QueryProductDetailsParams query,
         CancellationToken cancellationToken)

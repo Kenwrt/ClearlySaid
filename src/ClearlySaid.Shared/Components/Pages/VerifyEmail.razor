@@ -1,0 +1,18 @@
+@page "/verify-email"
+@inject IAccountService AccountService
+@inject NavigationManager Navigation
+
+<PageTitle>Activate account - ClearlySaid</PageTitle>
+<main class="cs-page"><section class="cs-account"><h1>Activate your account</h1><p role="status">@message</p><a class="cs-button cs-button-primary" href="/">Return to sign in</a></section></main>
+
+@code {
+    private string message = "Activating your account…";
+    protected override async Task OnInitializedAsync()
+    {
+        var token = ReadToken();
+        try { await AccountService.VerifyEmailAsync(token); message = "Your email is verified. Welcome to ClearlySaid—you can now sign in."; }
+        catch (AccountApiException ex) { message = ex.Message; }
+    }
+    private string ReadToken() => Uri.UnescapeDataString(new Uri(Navigation.Uri).Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+        .FirstOrDefault(part => part.StartsWith("token=", StringComparison.OrdinalIgnoreCase))?.Split('=', 2).ElementAtOrDefault(1) ?? "");
+}

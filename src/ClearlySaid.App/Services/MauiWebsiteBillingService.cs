@@ -1,4 +1,5 @@
 using ClearlySaid.Shared.Services;
+using ClearlySaid.Shared.Models;
 
 namespace ClearlySaid.App.Services;
 
@@ -45,5 +46,11 @@ public sealed class MauiWebsiteBillingService : IBillingService
         {
             throw new AccountApiException("ClearlySaid could not open the billing website.");
         }
+    }
+
+    public async Task<CancelSubscriptionResponse> CancelSubscriptionAsync(CancellationToken cancellationToken = default)
+    {
+        await ManageBillingAsync(cancellationToken);
+        return new("Use the billing website to confirm cancellation.", null);
     }
 }

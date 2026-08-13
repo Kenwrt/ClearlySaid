@@ -58,6 +58,11 @@ input { box-sizing: border-box; }
 .cs-admin-check input { min-height: auto; }
 .cs-admin-notice { padding: .8rem 1rem; color: #126437; background: #e9f8ef; border-radius: 8px; }
 .cs-admin-hint { margin: -.25rem 0 .8rem; color: #687184; font-size: .9rem; line-height: 1.45; }
+.cs-admin-user-actions { display: grid; gap: 1rem; }
+.cs-admin-section-copy { margin: 0 0 1rem; color: #5f6879; line-height: 1.5; }
+.cs-admin-security-card { border-left: 4px solid #5965e8; }
+.cs-admin-danger-zone { border-color: #efb5b5; background: #fffafa; }
+.cs-admin-danger-zone h2 { color: #9d1c1c; }
 .cs-admin-table-wrap { overflow-x: auto; }
 .cs-admin-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
 .cs-admin-table th, .cs-admin-table td { padding: .7rem; border-bottom: 1px solid #e4e7ee; text-align: left; vertical-align: top; }

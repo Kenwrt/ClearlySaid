@@ -41,6 +41,14 @@
             <button class="cs-link-button" type="button" @onclick="ToggleAccountMode">
                 @(showRegistration ? "Already have an account? Sign in" : "New to ClearlySaid? Create an account")
             </button>
+            @if (!showRegistration)
+            {
+                <button class="cs-link-button" type="button" @onclick="RequestPasswordResetAsync">Forgot password?</button>
+            }
+            @if (!string.IsNullOrWhiteSpace(accountNotice))
+            {
+                <p class="cs-billing-notice" role="status">@accountNotice</p>
+            }
         </section>
     }
     else
@@ -90,6 +98,10 @@
                         <button class="cs-link-button" type="button" disabled="@isBillingBusy" @onclick="ManageBillingAsync">
                             Manage billing
                         </button>
+                        @if (string.Equals(account.SubscriptionProvider, "stripe", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <button class="cs-link-button" type="button" disabled="@isBillingBusy" @onclick="CancelBillingAsync">Cancel subscription</button>
+                        }
                     }
                 </div>
             </div>
@@ -255,6 +267,7 @@
     private bool isBillingBusy;
     private string billingNotice = string.Empty;
     private string email = string.Empty;
+    private string accountNotice = string.Empty;
     private string password = string.Empty;
     private string selectedPurpose = MessageStyleCatalog.PreservePurpose;
     private string selectedTone = MessageStyleCatalog.PreserveTone;
@@ -318,7 +331,9 @@
             errorMessage = string.Empty;
             if (showRegistration)
             {
-                await AccountService.RegisterAsync(email, password);
+                accountNotice = await AccountService.RegisterAsync(email, password);
+                showRegistration = false;
+                password = string.Empty;
             }
             else
             {
@@ -335,6 +350,13 @@
         {
             isAccountBusy = false;
         }
+    }
+
+    private async Task RequestPasswordResetAsync()
+    {
+        if (string.IsNullOrWhiteSpace(email)) { accountNotice = "Enter your email address first."; return; }
+        await AccountService.RequestPasswordResetAsync(email);
+        accountNotice = "If that account exists, a password-reset link is on its way.";
     }
 
     private void ToggleAccountMode()
@@ -358,6 +380,15 @@
     private async Task ManageBillingAsync()
     {
         await RunBillingAsync(() => BillingService.ManageBillingAsync());
+    }
+
+    private async Task CancelBillingAsync()
+    {
+        await RunBillingAsync(async () =>
+        {
+            var result = await BillingService.CancelSubscriptionAsync();
+            billingNotice = result.AccessEndsAt is null ? result.Message : $"{result.Message} Paid access continues through {result.AccessEndsAt:MMMM d, yyyy}.";
+        });
     }
 
     private async Task RefreshPlanAsync()

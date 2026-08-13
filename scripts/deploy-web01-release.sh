@@ -50,7 +50,7 @@ docker run --detach \
 healthy=false
 for attempt in {1..30}; do
   if curl --fail --silent \
-      --header 'Host: clearlysaid.healthcareautomation.services' \
+      --header 'Host: clearlysaid.ai' \
       http://127.0.0.1:5102/health >/dev/null; then
     healthy=true
     break
