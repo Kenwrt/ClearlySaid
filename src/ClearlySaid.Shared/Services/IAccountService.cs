@@ -12,6 +12,7 @@ public interface IAccountService
     Task<string> RegisterAsync(string email, string password, CancellationToken cancellationToken = default);
     Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken = default);
     Task ResetPasswordAsync(string token, string password, CancellationToken cancellationToken = default);
+    Task AcceptInvitationAsync(string token, string password, CancellationToken cancellationToken = default);
     Task VerifyEmailAsync(string token, CancellationToken cancellationToken = default);
     Task ResendVerificationAsync(string email, CancellationToken cancellationToken = default);
     Task RefreshAsync(CancellationToken cancellationToken = default);

@@ -11,6 +11,11 @@ public sealed class TransactionalEmailService(IHttpClientFactory clients, IConfi
         email, "Activate your ClearlySaid account", "Activate account",
         "Confirm your email address to activate your ClearlySaid account.", Link("verify-email", token), ct);
 
+    public Task SendInvitationAsync(string email, string token, CancellationToken ct) => SendAsync(
+        email, "You're invited to ClearlySaid", "Set up your ClearlySaid account",
+        "An administrator created a ClearlySaid account for you. Use this secure link within 48 hours to verify your email and choose your password.",
+        Link("accept-invitation", token), ct);
+
     public Task SendWelcomeAsync(string email, CancellationToken ct) => SendAsync(
         email, "Welcome to ClearlySaid", "Welcome to ClearlySaid",
         "Your email is verified and your account is ready. You can now sign in and start improving messages.", BaseUrl(), ct);

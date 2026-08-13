@@ -15,7 +15,6 @@ public sealed record AdminUser(
 
 public sealed record CreateAdminUserRequest(
     string Email,
-    string Password,
     string Role,
     string Plan);
 

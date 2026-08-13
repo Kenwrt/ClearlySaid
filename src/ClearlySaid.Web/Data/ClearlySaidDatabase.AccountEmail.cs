@@ -114,4 +114,43 @@ public sealed partial class ClearlySaidDatabase
         await transaction.CommitAsync(cancellationToken);
         return true;
     }
+
+    public async Task<string?> AcceptInvitationAsync(
+        string token, string password, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var find = connection.CreateCommand();
+        find.Transaction = transaction;
+        find.CommandText = """
+            SELECT t.id, u.id, u.normalized_email, u.email FROM clearlysaid_account_tokens t
+            JOIN clearlysaid_users u ON u.id = t.user_id
+            WHERE t.purpose = 'invitation' AND t.token_hash = @hash
+              AND t.consumed_at IS NULL AND t.expires_at > now()
+              AND u.disabled_at IS NULL AND u.email_verified_at IS NULL;
+            """;
+        find.Parameters.AddWithValue("hash", HashToken(token));
+        await using var reader = await find.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+        var tokenId = reader.GetGuid(0);
+        var user = new UserCredential(reader.GetGuid(1), reader.GetString(2));
+        var email = reader.GetString(3);
+        await reader.CloseAsync();
+
+        var hash = passwordHasher.HashPassword(user, password);
+        await using var update = connection.CreateCommand();
+        update.Transaction = transaction;
+        update.CommandText = """
+            UPDATE clearlysaid_users
+            SET password_hash = @passwordHash, email_verified_at = now()
+            WHERE id = @userId;
+            UPDATE clearlysaid_account_tokens SET consumed_at = now() WHERE id = @tokenId;
+            """;
+        update.Parameters.AddWithValue("passwordHash", hash);
+        update.Parameters.AddWithValue("userId", user.Id);
+        update.Parameters.AddWithValue("tokenId", tokenId);
+        await update.ExecuteNonQueryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return email;
+    }
 }

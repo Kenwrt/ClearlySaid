@@ -15,6 +15,7 @@ public static class AccountEndpoints
         endpoints.MapPost("/api/account/email/resend", ResendVerificationAsync).RequireRateLimiting("account");
         endpoints.MapPost("/api/account/password/forgot", ForgotPasswordAsync).RequireRateLimiting("account");
         endpoints.MapPost("/api/account/password/reset", ResetPasswordAsync).RequireRateLimiting("account");
+        endpoints.MapPost("/api/account/invitation/accept", AcceptInvitationAsync).RequireRateLimiting("account");
         endpoints.MapGet("/api/account/me", GetAccountAsync);
         endpoints.MapPost("/api/account/logout", LogoutAsync);
         endpoints.MapDelete("/api/account", DeleteAccountAsync);
@@ -81,6 +82,23 @@ public static class AccountEndpoints
             return Results.Problem("Use at least 12 characters, including an uppercase letter, lowercase letter, and number.", statusCode: 400);
         return await database.ResetPasswordWithTokenAsync(request.Token, request.Password, cancellationToken)
             ? Results.Ok() : Results.Problem("This password-reset link is invalid or expired.", statusCode: 400);
+    }
+
+    private static async Task<IResult> AcceptInvitationAsync(
+        AcceptInvitationRequest request,
+        ClearlySaidDatabase database,
+        TransactionalEmailService emailService,
+        CancellationToken cancellationToken)
+    {
+        if (!IsValidPassword(request.Password))
+            return Results.Problem("Use at least 12 characters, including an uppercase letter, lowercase letter, and number.", statusCode: 400);
+
+        var email = await database.AcceptInvitationAsync(request.Token, request.Password, cancellationToken);
+        if (email is null)
+            return Results.Problem("This invitation link is invalid or expired.", statusCode: 400);
+
+        await emailService.SendWelcomeAsync(email, cancellationToken);
+        return Results.Ok();
     }
 
     private static async Task<IResult> LoginAsync(

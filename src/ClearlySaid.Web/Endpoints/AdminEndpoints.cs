@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using ClearlySaid.Shared.Models;
 using ClearlySaid.Web.Data;
+using ClearlySaid.Web.Services;
 
 namespace ClearlySaid.Web.Endpoints;
 
@@ -29,19 +30,21 @@ public static class AdminEndpoints
         HttpRequest httpRequest,
         CreateAdminUserRequest request,
         ClearlySaidDatabase database,
+        TransactionalEmailService emailService,
         CancellationToken cancellationToken)
     {
         var admin = await RequireAdminAsync(httpRequest, database, cancellationToken);
         if (admin is null) return Results.StatusCode(StatusCodes.Status403Forbidden);
-        if (!IsValidEmail(request.Email) || !IsValidPassword(request.Password) ||
-            !IsValidRole(request.Role) || !IsValidPlan(request.Plan))
+        if (!IsValidEmail(request.Email) || !IsValidRole(request.Role) || !IsValidPlan(request.Plan))
         {
-            return Results.Problem("Enter a valid email, strong password, role, and subscription plan.", statusCode: 400);
+            return Results.Problem("Enter a valid email, role, and subscription plan.", statusCode: 400);
         }
 
         var user = await database.CreateAdminUserAsync(request, cancellationToken);
         if (user is null) return Results.Conflict();
-        await AuditAsync(database, admin, "UserCreated", $"Created {user.Email} as {user.Role}.", user.Id, cancellationToken);
+        var invitation = await database.CreateAccountTokenAsync(user.Email, "invitation", TimeSpan.FromHours(48), true, cancellationToken);
+        await emailService.SendInvitationAsync(user.Email, invitation.Token, cancellationToken);
+        await AuditAsync(database, admin, "UserInvited", $"Invited {user.Email} as {user.Role}.", user.Id, cancellationToken);
         return Results.Created($"/api/admin/users/{user.Id}", user);
     }
 

@@ -48,6 +48,9 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
     public Task ResetPasswordAsync(string token, string password, CancellationToken cancellationToken = default) =>
         PostAccountActionAsync("api/account/password/reset", new PasswordResetRequest(token, password), cancellationToken);
 
+    public Task AcceptInvitationAsync(string token, string password, CancellationToken cancellationToken = default) =>
+        PostAccountActionAsync("api/account/invitation/accept", new AcceptInvitationRequest(token, password), cancellationToken);
+
     public Task VerifyEmailAsync(string token, CancellationToken cancellationToken = default) =>
         PostAccountActionAsync("api/account/email/verify", new TokenRequest(token), cancellationToken);
 

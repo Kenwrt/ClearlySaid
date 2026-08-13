@@ -493,7 +493,8 @@ public sealed partial class ClearlySaidDatabase(
         var plan = SubscriptionPlans.GetRequired(request.Plan);
         var normalizedEmail = NormalizeEmail(request.Email);
         var user = new UserCredential(Guid.NewGuid(), normalizedEmail);
-        var passwordHash = passwordHasher.HashPassword(user, request.Password);
+        var temporarySecret = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
+        var passwordHash = passwordHasher.HashPassword(user, temporarySecret);
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         try
@@ -501,8 +502,8 @@ public sealed partial class ClearlySaidDatabase(
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
             command.CommandText = """
-                INSERT INTO clearlysaid_users (id, email, normalized_email, password_hash, role)
-                VALUES (@id, @email, @normalizedEmail, @passwordHash, @role);
+                INSERT INTO clearlysaid_users (id, email, normalized_email, password_hash, role, email_verified_at)
+                VALUES (@id, @email, @normalizedEmail, @passwordHash, @role, NULL);
                 INSERT INTO clearlysaid_entitlements
                     (user_id, plan_id, monthly_allowance, status, provider, period_started_at, period_ends_at)
                 VALUES (@id, @plan, @allowance, 'active', 'admin', date_trunc('month', now()), date_trunc('month', now()) + interval '1 month');

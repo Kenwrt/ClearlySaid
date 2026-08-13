@@ -1,0 +1,30 @@
+@page "/accept-invitation"
+@inject IAccountService AccountService
+@inject NavigationManager Navigation
+
+<PageTitle>Accept invitation - ClearlySaid</PageTitle>
+<main class="cs-page"><section class="cs-account"><h1>Set up your account</h1>
+<p>Choose a password to verify your email and activate your ClearlySaid account.</p>
+<label>New password</label><input type="password" autocomplete="new-password" @bind="password" />
+<small>Use at least 12 characters with uppercase, lowercase, and a number.</small>
+<button class="cs-button cs-button-primary" disabled="@busy" @onclick="AcceptAsync">Activate account</button>
+<p role="status">@message</p></section></main>
+
+@code {
+    private string password = "", message = "";
+    private bool busy;
+
+    private async Task AcceptAsync()
+    {
+        busy = true;
+        var token = Uri.UnescapeDataString(new Uri(Navigation.Uri).Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault(part => part.StartsWith("token=", StringComparison.OrdinalIgnoreCase))?.Split('=', 2).ElementAtOrDefault(1) ?? "");
+        try
+        {
+            await AccountService.AcceptInvitationAsync(token, password);
+            message = "Your account is active. You may now return to the sign-in page.";
+        }
+        catch (AccountApiException ex) { message = ex.Message; }
+        finally { busy = false; }
+    }
+}

@@ -10,6 +10,8 @@ public sealed record TokenRequest(string Token);
 
 public sealed record PasswordResetRequest(string Token, string Password);
 
+public sealed record AcceptInvitationRequest(string Token, string Password);
+
 public sealed record RegistrationResponse(string Message);
 
 public sealed record AuthResponse(string AccessToken, DateTimeOffset ExpiresAt, AccountInfo Account);
