@@ -10,7 +10,7 @@ public static class AccountEndpoints
     public static IEndpointRouteBuilder MapClearlySaidAccountEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPost("/api/account/register", RegisterAsync).RequireRateLimiting("account");
-        endpoints.MapPost("/api/account/login", LoginAsync).RequireRateLimiting("account");
+        endpoints.MapPost("/api/account/login", LoginAsync).RequireRateLimiting("login");
         endpoints.MapPost("/api/account/email/verify", VerifyEmailAsync).RequireRateLimiting("account");
         endpoints.MapPost("/api/account/email/resend", ResendVerificationAsync).RequireRateLimiting("account");
         endpoints.MapPost("/api/account/password/forgot", ForgotPasswordAsync).RequireRateLimiting("account");

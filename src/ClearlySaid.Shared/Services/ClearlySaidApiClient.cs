@@ -30,7 +30,10 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
     {
         var response = await httpClient.PostAsJsonAsync(
             "api/account/login", new LoginRequest(email, password), cancellationToken);
-        await CompleteAuthenticationAsync(response, cancellationToken);
+        await CompleteAuthenticationAsync(
+            response,
+            cancellationToken,
+            "You've reached the maximum number of sign-in attempts. Please wait five minutes before trying again.");
     }
 
     public async Task<string> RegisterAsync(string email, string password, CancellationToken cancellationToken = default)
@@ -228,11 +231,12 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
 
     private async Task CompleteAuthenticationAsync(
         HttpResponseMessage response,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? tooManyRequestsMessage = null)
     {
         using (response)
         {
-            await EnsureSuccessAsync(response, cancellationToken);
+            await EnsureSuccessAsync(response, cancellationToken, tooManyRequestsMessage);
             var auth = await response.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken)
                 ?? throw new AccountApiException("The account service returned an empty response.");
             await tokenStore.SetAsync(auth.AccessToken);
@@ -252,7 +256,8 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
 
     private static async Task EnsureSuccessAsync(
         HttpResponseMessage response,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? tooManyRequestsMessage = null)
     {
         if (response.IsSuccessStatusCode)
         {
@@ -276,7 +281,8 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
         {
             HttpStatusCode.Unauthorized => "Your session has expired. Please sign in again.",
             HttpStatusCode.Forbidden => "Administrator access is required.",
-            HttpStatusCode.TooManyRequests => "You have reached your current usage limit.",
+            HttpStatusCode.TooManyRequests =>
+                tooManyRequestsMessage ?? "You have reached your current usage limit.",
             HttpStatusCode.BadGateway or HttpStatusCode.GatewayTimeout =>
                 "ClearlySaid took longer than expected. Please submit your message again.",
             _ => "ClearlySaid is temporarily unavailable. Please try again."

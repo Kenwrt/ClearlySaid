@@ -45,6 +45,7 @@ builder.Services.AddScoped<IAccountService>(services => services.GetRequiredServ
 builder.Services.AddScoped<IMessageRefinementService>(services => services.GetRequiredService<ClearlySaidApiClient>());
 builder.Services.AddScoped<IAdminService>(services => services.GetRequiredService<ClearlySaidApiClient>());
 builder.Services.AddScoped<IBillingService, StripeWebBillingService>();
+builder.Services.AddScoped<IRegistrationSuccessTracker, MetaPixelRegistrationSuccessTracker>();
 builder.Services.AddScoped<Api01MessageRefinementService>();
 builder.Services.AddSingleton<ActiveRefinementRequests>();
 builder.Services.AddScoped<IDictationService, BrowserDictationService>();
@@ -70,6 +71,22 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter =
+                Math.Ceiling(retryAfter.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        var detail = context.HttpContext.Request.Path.Equals(
+            "/api/account/login",
+            StringComparison.OrdinalIgnoreCase)
+            ? "You've reached the maximum number of sign-in attempts. Please wait five minutes before trying again."
+            : "Too many requests. Please wait and try again.";
+        await Results.Problem(detail: detail, statusCode: StatusCodes.Status429TooManyRequests)
+            .ExecuteAsync(context.HttpContext);
+    };
     options.AddPolicy("refine", context => RateLimitPartition.GetFixedWindowLimiter(
         GetClientPartitionKey(context, builder.Configuration),
         _ => new FixedWindowRateLimiterOptions
@@ -77,6 +94,15 @@ builder.Services.AddRateLimiter(options =>
             PermitLimit = 30,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0
+        }));
+    options.AddPolicy("login", context => RateLimitPartition.GetFixedWindowLimiter(
+        GetClientPartitionKey(context, builder.Configuration),
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(5),
+            QueueLimit = 0,
+            AutoReplenishment = true
         }));
     options.AddPolicy("account", context => RateLimitPartition.GetFixedWindowLimiter(
         GetClientPartitionKey(context, builder.Configuration),

@@ -4,6 +4,7 @@
 @inject IAccountService AccountService
 @inject IBillingService BillingService
 @inject IDictationService DictationService
+@inject IServiceProvider Services
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 
@@ -332,6 +333,10 @@
             if (showRegistration)
             {
                 accountNotice = await AccountService.RegisterAsync(email, password);
+                if (Services.GetService(typeof(IRegistrationSuccessTracker)) is IRegistrationSuccessTracker tracker)
+                {
+                    await tracker.TrackAsync();
+                }
                 showRegistration = false;
                 password = string.Empty;
             }
