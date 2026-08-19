@@ -53,6 +53,34 @@
     font: inherit;
 }
 
+.cs-password-field { position: relative; }
+
+.cs-password-field input {
+    width: 100%;
+    padding-right: 3.25rem;
+}
+
+.cs-password-toggle {
+    position: absolute;
+    top: 50%;
+    right: .5rem;
+    display: grid;
+    width: 2.25rem;
+    height: 2.25rem;
+    transform: translateY(-50%);
+    place-items: center;
+    border: 0;
+    border-radius: .5rem;
+    padding: 0;
+    background: transparent;
+    color: #4c55c8;
+    cursor: pointer;
+}
+
+.cs-password-toggle:hover { background: #eef0ff; }
+.cs-password-toggle:focus-visible { outline: 2px solid #5965e8; outline-offset: 2px; }
+.cs-password-toggle svg { width: 1.35rem; height: 1.35rem; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+
 .cs-link-button {
     border: 0;
     padding: .4rem;
@@ -350,6 +378,9 @@ textarea::placeholder { color: #989cb0; }
         background: #10121c;
         color: #f5f6ff;
     }
+
+    .cs-password-toggle { color: #aeb5ff; }
+    .cs-password-toggle:hover { background: #252a40; }
 
     textarea::placeholder { color: #7f849b; }
     .cs-style-controls { border-color: #30344a; background: #151827; }
