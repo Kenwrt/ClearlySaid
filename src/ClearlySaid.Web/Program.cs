@@ -130,6 +130,49 @@ app.UseAntiforgery();
 app.UseRateLimiter();
 app.UseMiddleware<DiagnosticsMiddleware>();
 
+app.Use(async (context, next) =>
+{
+    if (!context.Request.Path.Equals(
+            "/downloads/ClearlySaid-Android-Test.apk",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        await next(context);
+        return;
+    }
+
+    var database = context.RequestServices.GetRequiredService<ClearlySaidDatabase>();
+    var user = await AccountEndpoints.AuthenticateAsync(
+        context.Request,
+        database,
+        context.RequestAborted);
+    if (user is null)
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return;
+    }
+
+    if (user.Role != AccountRoles.Admin)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+
+    var packagePath = Path.Combine(
+        app.Environment.WebRootPath,
+        "downloads",
+        "ClearlySaid-Android-Test.apk");
+    if (!File.Exists(packagePath))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    context.Response.ContentType = "application/vnd.android.package-archive";
+    context.Response.Headers.ContentDisposition =
+        "attachment; filename=ClearlySaid-Android-Test.apk";
+    await context.Response.SendFileAsync(packagePath, context.RequestAborted);
+});
+
 await app.Services.GetRequiredService<ClearlySaidDatabase>().InitializeAsync(CancellationToken.None);
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", application = "ClearlySaid" }));

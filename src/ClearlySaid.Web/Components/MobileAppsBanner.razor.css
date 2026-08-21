@@ -1,0 +1,124 @@
+.mobile-apps-banner {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    max-width: 760px;
+    margin: 0 auto 2rem;
+    padding: 1.1rem 1.25rem;
+    overflow: hidden;
+    border: 1px solid #d8dcf0;
+    border-radius: 18px;
+    color: #20243a;
+    box-shadow: 0 12px 30px rgb(27 36 75 / 10%);
+}
+
+.coming-soon {
+    background:
+        radial-gradient(circle at 92% 15%, rgb(132 101 255 / 22%), transparent 30%),
+        linear-gradient(135deg, #ffffff 0%, #f2f0ff 58%, #e9f6ff 100%);
+}
+
+.admin-download {
+    background: linear-gradient(135deg, #ffffff 0%, #eef0ff 100%);
+}
+
+.mobile-apps-icon {
+    display: grid;
+    flex: 0 0 3.1rem;
+    width: 3.1rem;
+    height: 3.1rem;
+    place-items: center;
+    border-radius: 1rem;
+    background: rgb(255 255 255 / 72%);
+    box-shadow: 0 6px 18px rgb(66 55 158 / 14%);
+    font-size: 1.55rem;
+}
+
+.mobile-apps-copy {
+    display: grid;
+    flex: 1 1 auto;
+    gap: .18rem;
+}
+
+.mobile-apps-copy strong {
+    font-size: 1.04rem;
+}
+
+.mobile-apps-copy > span:last-child {
+    color: #5e6379;
+}
+
+.mobile-apps-kicker {
+    color: #5849ce;
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+}
+
+.platform-pills {
+    display: flex;
+    flex: 0 0 auto;
+    gap: .45rem;
+}
+
+.platform-pills span {
+    padding: .45rem .7rem;
+    border: 1px solid rgb(88 73 206 / 18%);
+    border-radius: 999px;
+    background: rgb(255 255 255 / 72%);
+    color: #4b42a9;
+    font-size: .78rem;
+    font-weight: 800;
+}
+
+.admin-download button {
+    flex: 0 0 auto;
+    min-height: 2.75rem;
+    border: 0;
+    border-radius: 10px;
+    padding: .7rem 1rem;
+    background: #5548d9;
+    color: #ffffff;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+}
+
+.admin-download button:hover:not(:disabled) { background: #4538c1; }
+.admin-download button:disabled { cursor: wait; opacity: .7; }
+.admin-download button:focus-visible { outline: 3px solid #9298ff; outline-offset: 2px; }
+
+@media (max-width: 640px) {
+    .mobile-apps-banner {
+        align-items: stretch;
+        flex-direction: column;
+        margin: 0 1rem 1.5rem;
+    }
+
+    .mobile-apps-icon { align-self: flex-start; }
+    .platform-pills { align-self: flex-start; }
+    .admin-download button { width: 100%; }
+}
+
+@media (prefers-color-scheme: dark) {
+    .mobile-apps-banner {
+        border-color: #363b58;
+        color: #f2f3fb;
+    }
+
+    .coming-soon {
+        background:
+            radial-gradient(circle at 92% 15%, rgb(132 101 255 / 24%), transparent 30%),
+            linear-gradient(135deg, #191c2b 0%, #22213a 58%, #172735 100%);
+    }
+
+    .admin-download { background: linear-gradient(135deg, #191c2b 0%, #222640 100%); }
+    .mobile-apps-icon,
+    .platform-pills span { background: rgb(11 13 23 / 45%); }
+    .mobile-apps-copy > span:last-child { color: #b6bbce; }
+    .platform-pills span { border-color: #4a4f75; color: #c7c2ff; }
+    .mobile-apps-kicker { color: #b6afff; }
+}

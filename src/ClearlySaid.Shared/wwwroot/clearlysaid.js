@@ -1,6 +1,23 @@
 window.clearlySaid = {
     copyText: async function (text) {
         await navigator.clipboard.writeText(text);
+    },
+    downloadAuthorized: async function (url, token, fileName) {
+        const response = await fetch(url, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!response.ok) {
+            throw new Error("The Android test app could not be downloaded.");
+        }
+
+        const objectUrl = URL.createObjectURL(await response.blob());
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(objectUrl);
     }
 };
 

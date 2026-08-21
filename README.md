@@ -58,7 +58,7 @@ The mobile app calls `https://clearlysaid.ai/`, configured in `src/ClearlySaid.A
 
 ## Android testing download
 
-Generate the signed testing APK with `scripts/Publish-Android-Test.ps1`, then publish Web01. The website exposes the package at `/downloads/ClearlySaid-Android-Test.apk` and displays a download banner for Android testers. See `docs/Android-Testing.md` for installation and signing guidance.
+Generate the signed testing APK with `scripts/Publish-Android-Test.ps1`, then publish Web01. The website serves the package at `/downloads/ClearlySaid-Android-Test.apk` only to authenticated administrators and displays the download control only for the Admin role. Other visitors see an Android and iPhone coming soon banner. See `docs/Android-Testing.md` for installation, access, and signing guidance.
 
 ## Deploy
 

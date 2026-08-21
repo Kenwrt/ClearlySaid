@@ -1,10 +1,10 @@
 # ClearlySaid Android test distribution
 
-Web01 exposes the testing package at:
+Web01 serves the testing package at:
 
 `https://clearlysaid.ai/downloads/ClearlySaid-Android-Test.apk`
 
-The web application also displays an Android testing download banner beneath the main application.
+The package is protected by ClearlySaid authentication and the Admin role. The web application displays the Android testing download control only to a signed-in administrator. Signed-out visitors and non-admin users see an Android and iPhone coming soon banner instead. A direct unauthenticated request to the package must return `401`, and an authenticated non-admin request must return `403`.
 
 ## Build the package
 
@@ -24,8 +24,8 @@ Publish Web01 after generating the APK:
 
 ## Tester instructions
 
-1. Open the ClearlySaid public website on the Android device.
-2. Select **Download Android test app**.
+1. Open the ClearlySaid public website on the Android device and sign in with an Admin account.
+2. Select **Download Android test app** from the administrator test-access banner.
 3. Android may ask the tester to allow installation from that browser or file manager. Enable it only for this installation.
 4. Open the downloaded APK and approve the installation.
 5. Disable the temporary **Install unknown apps** permission afterward.

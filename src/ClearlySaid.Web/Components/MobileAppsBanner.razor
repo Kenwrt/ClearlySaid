@@ -1,0 +1,88 @@
+@implements IDisposable
+@using ClearlySaid.Shared.Models
+@using ClearlySaid.Shared.Services
+@inject IAccountService AccountService
+@inject IAccessTokenStore TokenStore
+@inject IJSRuntime JS
+
+@if (ready)
+{
+    @if (AccountService.CurrentAccount?.Role == AccountRoles.Admin)
+    {
+        <aside class="mobile-apps-banner admin-download" aria-label="Administrator Android testing download">
+            <div class="mobile-apps-icon" aria-hidden="true">🤖</div>
+            <div class="mobile-apps-copy">
+                <span class="mobile-apps-kicker">Admin test access</span>
+                <strong>Take the latest Android build for a spin.</strong>
+                <span>This private test package is available only to ClearlySaid administrators.</span>
+            </div>
+            <button type="button" disabled="@downloading" @onclick="DownloadAsync">
+                @(downloading ? "Preparing download..." : "Download Android test app")
+            </button>
+        </aside>
+    }
+    else
+    {
+        <aside class="mobile-apps-banner coming-soon" aria-label="ClearlySaid mobile apps coming soon">
+            <div class="mobile-apps-icon" aria-hidden="true">✨</div>
+            <div class="mobile-apps-copy">
+                <span class="mobile-apps-kicker">Pocket-sized clarity is on the way</span>
+                <strong>ClearlySaid is coming soon to Android and iPhone.</strong>
+                <span>Same clear words, more places to say them. Stay tuned.</span>
+            </div>
+            <div class="platform-pills" aria-label="Planned mobile platforms">
+                <span>Android</span>
+                <span>iPhone</span>
+            </div>
+        </aside>
+    }
+}
+
+@code {
+    private bool ready;
+    private bool downloading;
+
+    protected override void OnInitialized() =>
+        AccountService.AccountChanged += OnAccountChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        await AccountService.InitializeAsync();
+        ready = true;
+        StateHasChanged();
+    }
+
+    private async Task DownloadAsync()
+    {
+        var token = await TokenStore.GetAsync();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return;
+        }
+
+        downloading = true;
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "clearlySaid.downloadAuthorized",
+                "/downloads/ClearlySaid-Android-Test.apk",
+                token,
+                "ClearlySaid-Android-Test.apk");
+        }
+        finally
+        {
+            downloading = false;
+        }
+    }
+
+    private void OnAccountChanged(object? sender, EventArgs args) =>
+        _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() =>
+        AccountService.AccountChanged -= OnAccountChanged;
+}

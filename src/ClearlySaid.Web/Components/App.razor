@@ -30,13 +30,7 @@
 
 <body>
     <ClearlySaid.Shared.Components.Routes @rendermode="InteractiveServer" />
-    <aside class="test-download" aria-label="Android testing download">
-        <div>
-            <strong>Testing ClearlySaid on Android?</strong>
-            <span>Install the private test build directly on your device.</span>
-        </div>
-        <a href="/downloads/ClearlySaid-Android-Test.apk" download>Download Android test app</a>
-    </aside>
+    <MobileAppsBanner @rendermode="InteractiveServer" />
     <footer class="site-footer">
         <a href="/privacy">Privacy</a>
         <a href="/account/delete">Delete account</a>
