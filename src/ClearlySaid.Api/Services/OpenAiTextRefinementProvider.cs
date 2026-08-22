@@ -77,7 +77,11 @@ public sealed class OpenAiTextRefinementProvider(
                 throw new OpenAiServiceException("The fallback service returned an empty message.");
             }
 
-            return new TextRefinementResult(output, Name, Model, stopwatch.ElapsedMilliseconds);
+            return new TextRefinementResult(
+                RefinementPrompt.NormalizeOutput(output),
+                Name,
+                Model,
+                stopwatch.ElapsedMilliseconds);
         }
     }
 

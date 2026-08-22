@@ -83,7 +83,11 @@ public sealed class OllamaTextRefinementProvider(
 
                 LogTimingDetails(document.RootElement, requestId);
 
-                return new TextRefinementResult(output, Name, Model, stopwatch.ElapsedMilliseconds);
+                return new TextRefinementResult(
+                    RefinementPrompt.NormalizeOutput(output),
+                    Name,
+                    Model,
+                    stopwatch.ElapsedMilliseconds);
             }
             catch (JsonException exception)
             {

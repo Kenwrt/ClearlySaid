@@ -292,6 +292,7 @@
     private string selectedTone = MessageStyleCatalog.PreserveTone;
     private string selectedDirectness = MessageStyleCatalog.BalancedDirectness;
     private CancellationTokenSource? operationCancellation;
+    private CancellationTokenSource? copyResetCancellation;
     private bool IsOutOfMessages => AccountService.CurrentAccount is
         { IsUnlimited: false, Remaining: 0 };
     private bool CanClear =>
@@ -526,6 +527,9 @@
         try
         {
             isBusy = true;
+            copyResetCancellation?.Cancel();
+            copyResetCancellation?.Dispose();
+            copyResetCancellation = null;
             copied = false;
             errorMessage = string.Empty;
             result = string.Empty;
@@ -566,6 +570,9 @@
         operationCancellation = null;
         activeCancellation?.Cancel();
         activeCancellation?.Dispose();
+        copyResetCancellation?.Cancel();
+        copyResetCancellation?.Dispose();
+        copyResetCancellation = null;
 
         try
         {
@@ -590,7 +597,35 @@
     private async Task CopyAsync()
     {
         await JS.InvokeVoidAsync("clearlySaid.copyText", result);
+
+        copyResetCancellation?.Cancel();
+        copyResetCancellation?.Dispose();
+        var resetCancellation = new CancellationTokenSource();
+        copyResetCancellation = resetCancellation;
         copied = true;
+        _ = ResetCopyStatusAsync(resetCancellation);
+    }
+
+    private async Task ResetCopyStatusAsync(CancellationTokenSource resetCancellation)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5), resetCancellation.Token);
+            if (!ReferenceEquals(copyResetCancellation, resetCancellation))
+            {
+                return;
+            }
+
+            await InvokeAsync(() =>
+            {
+                copied = false;
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // A later copy, clear, or component disposal superseded this reset.
+        }
     }
 
     private void OnTranscriptChanged(object? sender, string transcript)
@@ -625,6 +660,8 @@
     {
         operationCancellation?.Cancel();
         operationCancellation?.Dispose();
+        copyResetCancellation?.Cancel();
+        copyResetCancellation?.Dispose();
         DictationService.TranscriptChanged -= OnTranscriptChanged;
         DictationService.ListeningStopped -= OnListeningStopped;
         DictationService.Error -= OnDictationError;
