@@ -20,3 +20,7 @@ artifacts/
 App_Data/
 tmp/
 src/ClearlySaid.Web/App_Data/
+.codex-delete-fix-key
+.codex-delete-fix-key.pub
+.codex-temp-web01-key
+.codex-web01-deploy-*
