@@ -24,7 +24,8 @@ public sealed record AccountInfo(
     int UsedThisPeriod,
     DateTimeOffset PeriodEndsAt,
     string Role = "User",
-    string? SubscriptionProvider = null)
+    string? SubscriptionProvider = null,
+    bool SecurityNoticeDismissed = false)
 {
     public bool IsUnlimited => Role == AccountRoles.Admin;
     public int Remaining => Math.Max(0, MonthlyAllowance - UsedThisPeriod);

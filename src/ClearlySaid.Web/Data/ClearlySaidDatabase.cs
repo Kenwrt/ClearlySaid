@@ -729,6 +729,15 @@ public sealed partial class ClearlySaidDatabase(
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task DismissSecurityNoticeAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE clearlysaid_users SET security_notice_dismissed = true WHERE id = @userId;";
+        command.Parameters.AddWithValue("userId", userId);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task DeleteAccountAsync(Guid userId, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
@@ -876,7 +885,7 @@ public sealed partial class ClearlySaidDatabase(
     private static AccountInfo ReadAccount(NpgsqlDataReader reader) => new(
         reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetInt32(3),
         reader.GetInt32(4), reader.GetFieldValue<DateTimeOffset>(5), reader.GetString(6),
-        reader.IsDBNull(7) ? null : reader.GetString(7));
+        reader.IsDBNull(7) ? null : reader.GetString(7), reader.GetBoolean(8));
 
     private static string NormalizeEmail(string email) => email.Trim().ToUpperInvariant();
     private static byte[] HashToken(string token) => SHA256.HashData(Encoding.UTF8.GetBytes(token));
@@ -884,13 +893,14 @@ public sealed partial class ClearlySaidDatabase(
     private const string AccountSql = """
         SELECT u.id, u.email, q.plan_id, q.monthly_allowance,
                count(e.id) FILTER (WHERE e.status IN ('reserved', 'completed'))::int AS used,
-               q.period_ends_at, u.role, q.provider
+               q.period_ends_at, u.role, q.provider, u.security_notice_dismissed
         FROM clearlysaid_users u
         JOIN clearlysaid_entitlements q ON q.user_id = u.id
         LEFT JOIN clearlysaid_usage_events e ON e.user_id = u.id
              AND e.occurred_at >= q.period_started_at AND e.occurred_at < q.period_ends_at
         WHERE u.id = @userId
-        GROUP BY u.id, u.email, q.plan_id, q.monthly_allowance, q.period_ends_at, u.role, q.provider;
+        GROUP BY u.id, u.email, q.plan_id, q.monthly_allowance, q.period_ends_at, u.role,
+                 q.provider, u.security_notice_dismissed;
         """;
 
     private const string SchemaSql = """
@@ -905,6 +915,7 @@ public sealed partial class ClearlySaidDatabase(
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'User';
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS email_verified_at timestamptz NULL DEFAULT now();
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS last_login_at timestamptz NULL;
+        ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS security_notice_dismissed boolean NOT NULL DEFAULT false;
         CREATE TABLE IF NOT EXISTS clearlysaid_account_tokens (
             id uuid PRIMARY KEY,
             user_id uuid NOT NULL REFERENCES clearlysaid_users(id) ON DELETE CASCADE,

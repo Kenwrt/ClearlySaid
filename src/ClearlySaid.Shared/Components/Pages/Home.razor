@@ -10,6 +10,31 @@
 
 <PageTitle>ClearlySaid</PageTitle>
 
+@if (showSecurityNotice && AccountService.CurrentAccount is not null)
+{
+    <div class="cs-modal-backdrop" role="presentation">
+        <section class="cs-security-modal" role="dialog" aria-modal="true" aria-labelledby="security-notice-heading" aria-describedby="security-notice-copy">
+            <span class="cs-security-icon" aria-hidden="true">🔒</span>
+            <h2 id="security-notice-heading">Confidentiality and security notice</h2>
+            <div id="security-notice-copy">
+                <p>ClearlySaid encrypts your message while it travels between your device and our services. Your text is processed only to create the rewrite you requested.</p>
+                <p>ClearlySaid does not save your original message or rewritten response in its account or usage database. The response is returned only to your signed-in session. We retain limited usage metadata, such as your account, processing time, message size, provider, latency, and outcome, but not the message or rewritten text.</p>
+                <p>If our private processing service definitely fails, your message may be sent to OpenAI as a fallback, as described in our Privacy Policy.</p>
+                <p><strong>Do not submit passwords, financial account information, protected health information, regulated data, or confidential information you are not authorized to share.</strong> ClearlySaid is not a records repository and is not represented as HIPAA compliant. HIPAA-regulated use requires a separate written agreement and appropriate compliance review.</p>
+            </div>
+            <label class="cs-security-choice"><input type="checkbox" @bind="doNotShowSecurityNoticeAgain" /> Don't display again</label>
+            @if (!string.IsNullOrWhiteSpace(securityNoticeError))
+            {
+                <p class="cs-error" role="alert">@securityNoticeError</p>
+            }
+            <div class="cs-security-actions">
+                <a href="/privacy">Read Privacy Policy</a>
+                <button class="cs-button cs-button-primary" type="button" disabled="@securityNoticeBusy" @onclick="CloseSecurityNoticeAsync">I understand</button>
+            </div>
+        </section>
+    </div>
+}
+
 <main class="cs-page">
     <header class="cs-brand">
         <h1>ClearlySaid</h1>
@@ -284,6 +309,10 @@
     private bool showPassword;
     private bool isAccountBusy;
     private bool isBillingBusy;
+    private bool showSecurityNotice;
+    private bool doNotShowSecurityNoticeAgain;
+    private bool securityNoticeBusy;
+    private string securityNoticeError = string.Empty;
     private string billingNotice = string.Empty;
     private string email = string.Empty;
     private string accountNotice = string.Empty;
@@ -309,6 +338,7 @@
         DictationService.ListeningStopped += OnListeningStopped;
         DictationService.Error += OnDictationError;
         AccountService.AccountChanged += OnAccountChanged;
+        AccountService.LoginSucceeded += OnLoginSucceeded;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -474,6 +504,40 @@
 
     private void OnAccountChanged(object? sender, EventArgs e) =>
         _ = InvokeAsync(StateHasChanged);
+
+    private void OnLoginSucceeded(object? sender, EventArgs e)
+    {
+        _ = InvokeAsync(() =>
+        {
+            showSecurityNotice = AccountService.CurrentAccount is { SecurityNoticeDismissed: false };
+            doNotShowSecurityNoticeAgain = false;
+            securityNoticeError = string.Empty;
+            StateHasChanged();
+        });
+    }
+
+    private async Task CloseSecurityNoticeAsync()
+    {
+        try
+        {
+            securityNoticeBusy = true;
+            securityNoticeError = string.Empty;
+            if (doNotShowSecurityNoticeAgain)
+            {
+                await AccountService.DismissSecurityNoticeAsync();
+            }
+
+            showSecurityNotice = false;
+        }
+        catch (Exception exception)
+        {
+            securityNoticeError = exception.Message;
+        }
+        finally
+        {
+            securityNoticeBusy = false;
+        }
+    }
 
     private async Task ToggleDictationAsync()
     {
@@ -666,5 +730,6 @@
         DictationService.ListeningStopped -= OnListeningStopped;
         DictationService.Error -= OnDictationError;
         AccountService.AccountChanged -= OnAccountChanged;
+        AccountService.LoginSucceeded -= OnLoginSucceeded;
     }
 }

@@ -7,6 +7,7 @@ public interface IAccountService
     AccountInfo? CurrentAccount { get; }
     bool IsInitialized { get; }
     event EventHandler? AccountChanged;
+    event EventHandler? LoginSucceeded;
     Task InitializeAsync(CancellationToken cancellationToken = default);
     Task LoginAsync(string email, string password, CancellationToken cancellationToken = default);
     Task<string> RegisterAsync(string email, string password, CancellationToken cancellationToken = default);
@@ -17,6 +18,7 @@ public interface IAccountService
     Task ResendVerificationAsync(string email, CancellationToken cancellationToken = default);
     Task RefreshAsync(CancellationToken cancellationToken = default);
     Task LogoutAsync(CancellationToken cancellationToken = default);
+    Task DismissSecurityNoticeAsync(CancellationToken cancellationToken = default);
     Task DeleteAccountAsync(CancellationToken cancellationToken = default);
 }
 

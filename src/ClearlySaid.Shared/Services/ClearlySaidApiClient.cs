@@ -14,6 +14,7 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
     public AccountInfo? CurrentAccount { get; private set; }
     public bool IsInitialized { get; private set; }
     public event EventHandler? AccountChanged;
+    public event EventHandler? LoginSucceeded;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -34,6 +35,7 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
             response,
             cancellationToken,
             "You've reached the maximum number of sign-in attempts. Please wait five minutes before trying again.");
+        LoginSucceeded?.Invoke(this, EventArgs.Empty);
     }
 
     public async Task<string> RegisterAsync(string email, string password, CancellationToken cancellationToken = default)
@@ -99,6 +101,20 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
 
         await tokenStore.RemoveAsync();
         SetAccount(null);
+    }
+
+    public async Task DismissSecurityNoticeAsync(CancellationToken cancellationToken = default)
+    {
+        var token = await tokenStore.GetAsync();
+        if (string.IsNullOrWhiteSpace(token) || CurrentAccount is null)
+        {
+            return;
+        }
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Post, "api/account/security-notice/dismiss", token);
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        SetAccount(CurrentAccount with { SecurityNoticeDismissed = true });
     }
 
     public async Task DeleteAccountAsync(CancellationToken cancellationToken = default)
