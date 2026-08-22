@@ -71,6 +71,10 @@ public interface IAdminService
     Task<AdminUser> UpdateUserAsync(Guid userId, UpdateAdminUserRequest request, CancellationToken cancellationToken = default);
     Task ResetPasswordAsync(Guid userId, string newPassword, CancellationToken cancellationToken = default);
     Task DeleteUserAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AdminUserActivity>> GetUserActivityAsync(
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AdminDiagnosticEvent>> GetDiagnosticsAsync(int limit = 250, CancellationToken cancellationToken = default);
 }
 

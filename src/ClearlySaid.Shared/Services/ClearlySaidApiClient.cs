@@ -190,6 +190,16 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
             cancellationToken,
             allowEmptyResponse: true);
 
+    public async Task<IReadOnlyList<AdminUserActivity>> GetUserActivityAsync(
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        CancellationToken cancellationToken = default) =>
+        await SendAdminAsync<List<AdminUserActivity>>(
+            HttpMethod.Get,
+            $"api/admin/activity?fromUtc={Uri.EscapeDataString(fromUtc.ToString("O"))}&toUtc={Uri.EscapeDataString(toUtc.ToString("O"))}",
+            null,
+            cancellationToken);
+
     public async Task<IReadOnlyList<AdminDiagnosticEvent>> GetDiagnosticsAsync(
         int limit = 250,
         CancellationToken cancellationToken = default) =>

@@ -11,7 +11,16 @@ public sealed record AdminUser(
     string? SubscriptionProvider,
     DateTimeOffset PeriodEndsAt,
     bool IsDisabled,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? LastLoginAt);
+
+public sealed record AdminUserActivity(
+    Guid UserId,
+    string Email,
+    string Role,
+    DateTimeOffset? LastLoginAt,
+    int ProcessedMessages,
+    DateTimeOffset? LastProcessedAt);
 
 public sealed record CreateAdminUserRequest(
     string Email,

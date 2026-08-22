@@ -14,6 +14,7 @@ public static class AdminEndpoints
         endpoints.MapPut("/api/admin/users/{userId:guid}", UpdateUserAsync).RequireRateLimiting("account");
         endpoints.MapPost("/api/admin/users/{userId:guid}/reset-password", ResetPasswordAsync).RequireRateLimiting("account");
         endpoints.MapDelete("/api/admin/users/{userId:guid}", DeleteUserAsync).RequireRateLimiting("account");
+        endpoints.MapGet("/api/admin/activity", GetActivityAsync);
         endpoints.MapGet("/api/admin/diagnostics", GetDiagnosticsAsync);
         return endpoints;
     }
@@ -145,6 +146,28 @@ public static class AdminEndpoints
         await RequireAdminAsync(request, database, cancellationToken) is null
             ? Results.StatusCode(StatusCodes.Status403Forbidden)
             : Results.Ok(await database.GetAdminDiagnosticsAsync(limit ?? 250, cancellationToken));
+
+    private static async Task<IResult> GetActivityAsync(
+        HttpRequest request,
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        ClearlySaidDatabase database,
+        CancellationToken cancellationToken)
+    {
+        if (await RequireAdminAsync(request, database, cancellationToken) is null)
+        {
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
+        }
+
+        if (fromUtc >= toUtc || toUtc - fromUtc > TimeSpan.FromDays(366))
+        {
+            return Results.Problem(
+                "Choose an end time after the start time and a range of 366 days or fewer.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        return Results.Ok(await database.GetAdminUserActivityAsync(fromUtc, toUtc, cancellationToken));
+    }
 
     private static async Task<AuthenticatedUser?> RequireAdminAsync(
         HttpRequest request,

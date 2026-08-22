@@ -1,0 +1,100 @@
+@page "/admin/activity"
+@inject IAccountService AccountService
+@inject IAdminService AdminService
+
+<PageTitle>User Activity - ClearlySaid Admin</PageTitle>
+
+<main class="cs-admin-page">
+    <header class="cs-admin-header">
+        <div><h1>User activity</h1><p>Successful messages processed by account within a UTC date and time range.</p></div>
+        <a href="/admin">Admin console</a>
+    </header>
+    @if (!ready)
+    {
+        <p>Loading...</p>
+    }
+    else if (AccountService.CurrentAccount?.Role != AccountRoles.Admin)
+    {
+        <section class="cs-admin-card"><h2>Access denied</h2></section>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(error))
+        {
+            <p class="cs-error" role="alert">@error</p>
+        }
+
+        <section class="cs-admin-card">
+            <div class="cs-admin-toolbar">
+                <label>Start date and time (UTC)<input type="datetime-local" @bind="fromUtc" /></label>
+                <label>End date and time (UTC)<input type="datetime-local" @bind="toUtc" /></label>
+                <button class="cs-button cs-button-primary" disabled="@busy" @onclick="LoadAsync">Run report</button>
+            </div>
+            <p class="cs-admin-report-summary" role="status">
+                @activity.Sum(x => x.ProcessedMessages).ToString("N0") messages processed by
+                @activity.Count(x => x.ProcessedMessages > 0).ToString("N0") active users.
+            </p>
+            <div class="cs-admin-table-wrap">
+                <table class="cs-admin-table">
+                    <thead><tr><th>User</th><th>Role</th><th>Messages processed</th><th>Last processed</th><th>Last login</th></tr></thead>
+                    <tbody>
+                        @foreach (var item in activity)
+                        {
+                            <tr>
+                                <td>@item.Email</td>
+                                <td>@item.Role</td>
+                                <td class="cs-admin-number">@item.ProcessedMessages.ToString("N0")</td>
+                                <td>@FormatTimestamp(item.LastProcessedAt)</td>
+                                <td>@FormatTimestamp(item.LastLoginAt)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
+</main>
+
+@code {
+    private IReadOnlyList<AdminUserActivity> activity = [];
+    private DateTime fromUtc = DateTime.UtcNow.Date;
+    private DateTime toUtc = DateTime.UtcNow.Date.AddDays(1);
+    private bool ready;
+    private bool busy;
+    private string error = string.Empty;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await AccountService.InitializeAsync();
+        ready = true;
+        if (AccountService.CurrentAccount?.Role == AccountRoles.Admin)
+        {
+            await LoadAsync();
+        }
+        StateHasChanged();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            busy = true;
+            error = string.Empty;
+            var from = new DateTimeOffset(DateTime.SpecifyKind(fromUtc, DateTimeKind.Utc));
+            var to = new DateTimeOffset(DateTime.SpecifyKind(toUtc, DateTimeKind.Utc));
+            activity = await AdminService.GetUserActivityAsync(from, to);
+        }
+        catch (Exception exception)
+        {
+            error = exception.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private static string FormatTimestamp(DateTimeOffset? timestamp) =>
+        timestamp?.ToUniversalTime().ToString("MMM d, yyyy h:mm tt 'UTC'") ?? "Never";
+}

@@ -114,6 +114,13 @@ public sealed partial class ClearlySaidDatabase(
         }
 
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var loginCommand = connection.CreateCommand())
+        {
+            loginCommand.Transaction = transaction;
+            loginCommand.CommandText = "UPDATE clearlysaid_users SET last_login_at = now() WHERE id = @id;";
+            loginCommand.Parameters.AddWithValue("id", user.Id);
+            await loginCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
         var session = await CreateSessionAsync(connection, transaction, user.Id, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         var account = await GetAccountAsync(user.Id, cancellationToken);
@@ -462,14 +469,14 @@ public sealed partial class ClearlySaidDatabase(
             SELECT u.id, u.email, u.role, q.plan_id, q.monthly_allowance,
                    count(e.id) FILTER (WHERE e.status IN ('reserved', 'completed'))::int,
                    q.status, q.provider, q.period_ends_at,
-                   u.disabled_at IS NOT NULL, u.created_at
+                   u.disabled_at IS NOT NULL, u.created_at, u.last_login_at
             FROM clearlysaid_users u
             JOIN clearlysaid_entitlements q ON q.user_id = u.id
             LEFT JOIN clearlysaid_usage_events e ON e.user_id = u.id
                  AND e.occurred_at >= q.period_started_at AND e.occurred_at < q.period_ends_at
             WHERE u.normalized_email NOT LIKE 'DELETED-%'
             GROUP BY u.id, u.email, u.role, q.plan_id, q.monthly_allowance,
-                     q.status, q.provider, q.period_ends_at, u.disabled_at, u.created_at
+                     q.status, q.provider, q.period_ends_at, u.disabled_at, u.created_at, u.last_login_at
             ORDER BY u.created_at DESC;
             """;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -480,10 +487,47 @@ public sealed partial class ClearlySaidDatabase(
                 reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
                 reader.GetInt32(4), reader.GetInt32(5), reader.GetString(6),
                 reader.IsDBNull(7) ? null : reader.GetString(7), reader.GetFieldValue<DateTimeOffset>(8),
-                reader.GetBoolean(9), reader.GetFieldValue<DateTimeOffset>(10)));
+                reader.GetBoolean(9), reader.GetFieldValue<DateTimeOffset>(10),
+                reader.IsDBNull(11) ? null : reader.GetFieldValue<DateTimeOffset>(11)));
         }
 
         return users;
+    }
+
+    public async Task<IReadOnlyList<AdminUserActivity>> GetAdminUserActivityAsync(
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT u.id, u.email, u.role, u.last_login_at,
+                   count(e.id) FILTER (
+                       WHERE e.status = 'completed' AND e.succeeded)::int AS processed_messages,
+                   max(e.occurred_at) FILTER (
+                       WHERE e.status = 'completed' AND e.succeeded) AS last_processed_at
+            FROM clearlysaid_users u
+            LEFT JOIN clearlysaid_usage_events e ON e.user_id = u.id
+                 AND e.occurred_at >= @fromUtc AND e.occurred_at < @toUtc
+            WHERE u.normalized_email NOT LIKE 'DELETED-%'
+            GROUP BY u.id, u.email, u.role, u.last_login_at
+            ORDER BY processed_messages DESC, lower(u.email);
+            """;
+        command.Parameters.AddWithValue("fromUtc", fromUtc);
+        command.Parameters.AddWithValue("toUtc", toUtc);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var activity = new List<AdminUserActivity>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            activity.Add(new AdminUserActivity(
+                reader.GetGuid(0), reader.GetString(1), reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetFieldValue<DateTimeOffset>(3),
+                reader.GetInt32(4),
+                reader.IsDBNull(5) ? null : reader.GetFieldValue<DateTimeOffset>(5)));
+        }
+
+        return activity;
     }
 
     public async Task<AdminUser?> CreateAdminUserAsync(
@@ -860,6 +904,7 @@ public sealed partial class ClearlySaidDatabase(
         );
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'User';
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS email_verified_at timestamptz NULL DEFAULT now();
+        ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS last_login_at timestamptz NULL;
         CREATE TABLE IF NOT EXISTS clearlysaid_account_tokens (
             id uuid PRIMARY KEY,
             user_id uuid NOT NULL REFERENCES clearlysaid_users(id) ON DELETE CASCADE,
