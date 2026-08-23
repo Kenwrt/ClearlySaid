@@ -37,6 +37,11 @@
 .cs-account h2,
 .cs-account p { margin: 0; }
 
+.cs-account form {
+    display: grid;
+    gap: .7rem;
+}
+
 .cs-account p,
 .cs-account small,
 .cs-account-summary span { color: #656b85; }

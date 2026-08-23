@@ -50,37 +50,39 @@
         <section class="cs-account" aria-labelledby="account-heading">
             <h2 id="account-heading">@(showRegistration ? "Create your account" : "Sign in")</h2>
             <p>Your account protects the service and keeps track of your monthly allowance.</p>
-            <label for="account-email">Email</label>
-            <input id="account-email" type="email" autocomplete="email" @bind="email" />
-            <label for="account-password">Password</label>
-            <div class="cs-password-field">
-                <input id="account-password"
-                       type="@(showPassword ? "text" : "password")"
-                       autocomplete="@(showRegistration ? "new-password" : "current-password")"
-                       @bind="password" />
-                <button type="button"
-                        class="cs-password-toggle"
-                        aria-label="@(showPassword ? "Hide password" : "Show password")"
-                        aria-pressed="@showPassword"
-                        title="@(showPassword ? "Hide password" : "Show password")"
-                        @onclick="TogglePasswordVisibility">
-                    @if (showPassword)
-                    {
-                        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.7a2 2 0 002.7 2.7M9.9 4.2A10.9 10.9 0 0112 4c5.5 0 9 5 9 5a15 15 0 01-2.1 2.5M6.6 6.6C4.3 8.1 3 10 3 10s3.5 5 9 5a10.8 10.8 0 004.2-.8" /></svg>
-                    }
-                    else
-                    {
-                        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5-9-5z" /><circle cx="12" cy="12" r="2.5" /></svg>
-                    }
+            <form @onsubmit="SubmitAccountAsync" @onsubmit:preventDefault>
+                <label for="account-email">Email</label>
+                <input id="account-email" type="email" autocomplete="email" @bind="email" />
+                <label for="account-password">Password</label>
+                <div class="cs-password-field">
+                    <input id="account-password"
+                           type="@(showPassword ? "text" : "password")"
+                           autocomplete="@(showRegistration ? "new-password" : "current-password")"
+                           @bind="password" />
+                    <button type="button"
+                            class="cs-password-toggle"
+                            aria-label="@(showPassword ? "Hide password" : "Show password")"
+                            aria-pressed="@showPassword"
+                            title="@(showPassword ? "Hide password" : "Show password")"
+                            @onclick="TogglePasswordVisibility">
+                        @if (showPassword)
+                        {
+                            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.7a2 2 0 002.7 2.7M9.9 4.2A10.9 10.9 0 0112 4c5.5 0 9 5 9 5a15 15 0 01-2.1 2.5M6.6 6.6C4.3 8.1 3 10 3 10s3.5 5 9 5a10.8 10.8 0 004.2-.8" /></svg>
+                        }
+                        else
+                        {
+                            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5-9-5z" /><circle cx="12" cy="12" r="2.5" /></svg>
+                        }
+                    </button>
+                </div>
+                @if (showRegistration)
+                {
+                    <small>Use at least 12 characters with uppercase, lowercase, and a number.</small>
+                }
+                <button class="cs-button cs-button-primary" type="submit" disabled="@isAccountBusy">
+                    @(isAccountBusy ? "Please waitâ€¦" : showRegistration ? "Create account" : "Sign in")
                 </button>
-            </div>
-            @if (showRegistration)
-            {
-                <small>Use at least 12 characters with uppercase, lowercase, and a number.</small>
-            }
-            <button class="cs-button cs-button-primary" type="button" disabled="@isAccountBusy" @onclick="SubmitAccountAsync">
-                @(isAccountBusy ? "Please waitâ€¦" : showRegistration ? "Create account" : "Sign in")
-            </button>
+            </form>
             <button class="cs-link-button" type="button" @onclick="ToggleAccountMode">
                 @(showRegistration ? "Already have an account? Sign in" : "New to ClearlySaid? Create an account")
             </button>
