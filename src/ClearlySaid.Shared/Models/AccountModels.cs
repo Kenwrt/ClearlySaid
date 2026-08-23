@@ -4,6 +4,8 @@ public sealed record RegisterRequest(string Email, string Password);
 
 public sealed record LoginRequest(string Email, string Password);
 
+public sealed record SecurityNoticeAcknowledgementRequest(bool DoNotDisplayAgain);
+
 public sealed record EmailRequest(string Email);
 
 public sealed record TokenRequest(string Token);

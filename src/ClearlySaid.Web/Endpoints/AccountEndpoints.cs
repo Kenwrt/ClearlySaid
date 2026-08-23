@@ -18,7 +18,7 @@ public static class AccountEndpoints
         endpoints.MapPost("/api/account/invitation/accept", AcceptInvitationAsync).RequireRateLimiting("account");
         endpoints.MapGet("/api/account/me", GetAccountAsync);
         endpoints.MapPost("/api/account/logout", LogoutAsync);
-        endpoints.MapPost("/api/account/security-notice/dismiss", DismissSecurityNoticeAsync);
+        endpoints.MapPost("/api/account/security-notice/acknowledge", AcknowledgeSecurityNoticeAsync);
         endpoints.MapDelete("/api/account", DeleteAccountAsync);
         endpoints.MapGet("/api/subscriptions/plans", GetSubscriptionPlans);
         endpoints.MapPost("/api/billing/google/verify", VerifyGooglePurchaseAsync);
@@ -153,8 +153,9 @@ public static class AccountEndpoints
         return Results.NoContent();
     }
 
-    private static async Task<IResult> DismissSecurityNoticeAsync(
+    private static async Task<IResult> AcknowledgeSecurityNoticeAsync(
         HttpRequest request,
+        SecurityNoticeAcknowledgementRequest acknowledgement,
         ClearlySaidDatabase database,
         CancellationToken cancellationToken)
     {
@@ -164,7 +165,10 @@ public static class AccountEndpoints
             return Results.Unauthorized();
         }
 
-        await database.DismissSecurityNoticeAsync(user.Id, cancellationToken);
+        await database.RecordSecurityNoticeAcknowledgementAsync(
+            user.Id,
+            acknowledgement.DoNotDisplayAgain,
+            cancellationToken);
         return Results.NoContent();
     }
 

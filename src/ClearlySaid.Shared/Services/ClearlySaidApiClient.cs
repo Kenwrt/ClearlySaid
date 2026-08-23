@@ -103,7 +103,9 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
         SetAccount(null);
     }
 
-    public async Task DismissSecurityNoticeAsync(CancellationToken cancellationToken = default)
+    public async Task AcknowledgeSecurityNoticeAsync(
+        bool doNotDisplayAgain,
+        CancellationToken cancellationToken = default)
     {
         var token = await tokenStore.GetAsync();
         if (string.IsNullOrWhiteSpace(token) || CurrentAccount is null)
@@ -111,10 +113,14 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
             return;
         }
 
-        using var request = CreateAuthorizedRequest(HttpMethod.Post, "api/account/security-notice/dismiss", token);
+        using var request = CreateAuthorizedRequest(HttpMethod.Post, "api/account/security-notice/acknowledge", token);
+        request.Content = JsonContent.Create(new SecurityNoticeAcknowledgementRequest(doNotDisplayAgain));
         using var response = await httpClient.SendAsync(request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        SetAccount(CurrentAccount with { SecurityNoticeDismissed = true });
+        if (doNotDisplayAgain)
+        {
+            SetAccount(CurrentAccount with { SecurityNoticeDismissed = true });
+        }
     }
 
     public async Task DeleteAccountAsync(CancellationToken cancellationToken = default)

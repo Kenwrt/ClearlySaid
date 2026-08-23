@@ -729,12 +729,26 @@ public sealed partial class ClearlySaidDatabase(
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task DismissSecurityNoticeAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task RecordSecurityNoticeAcknowledgementAsync(
+        Guid userId,
+        bool doNotDisplayAgain,
+        CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = "UPDATE clearlysaid_users SET security_notice_dismissed = true WHERE id = @userId;";
+        command.CommandText = """
+            INSERT INTO clearlysaid_security_notice_acknowledgements
+                (id, user_id, notice_version, acknowledged_at, do_not_display_again)
+            VALUES
+                (@id, @userId, @noticeVersion, now(), @doNotDisplayAgain);
+            UPDATE clearlysaid_users
+            SET security_notice_dismissed = security_notice_dismissed OR @doNotDisplayAgain
+            WHERE id = @userId;
+            """;
+        command.Parameters.AddWithValue("id", Guid.NewGuid());
         command.Parameters.AddWithValue("userId", userId);
+        command.Parameters.AddWithValue("noticeVersion", "2026-08-22");
+        command.Parameters.AddWithValue("doNotDisplayAgain", doNotDisplayAgain);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -916,6 +930,15 @@ public sealed partial class ClearlySaidDatabase(
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS email_verified_at timestamptz NULL DEFAULT now();
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS last_login_at timestamptz NULL;
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS security_notice_dismissed boolean NOT NULL DEFAULT false;
+        CREATE TABLE IF NOT EXISTS clearlysaid_security_notice_acknowledgements (
+            id uuid PRIMARY KEY,
+            user_id uuid NOT NULL REFERENCES clearlysaid_users(id) ON DELETE CASCADE,
+            notice_version text NOT NULL,
+            acknowledged_at timestamptz NOT NULL DEFAULT now(),
+            do_not_display_again boolean NOT NULL DEFAULT false
+        );
+        CREATE INDEX IF NOT EXISTS ix_clearlysaid_security_notice_acknowledgements_user
+            ON clearlysaid_security_notice_acknowledgements(user_id, acknowledged_at DESC);
         CREATE TABLE IF NOT EXISTS clearlysaid_account_tokens (
             id uuid PRIMARY KEY,
             user_id uuid NOT NULL REFERENCES clearlysaid_users(id) ON DELETE CASCADE,

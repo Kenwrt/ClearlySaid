@@ -18,7 +18,7 @@ public interface IAccountService
     Task ResendVerificationAsync(string email, CancellationToken cancellationToken = default);
     Task RefreshAsync(CancellationToken cancellationToken = default);
     Task LogoutAsync(CancellationToken cancellationToken = default);
-    Task DismissSecurityNoticeAsync(CancellationToken cancellationToken = default);
+    Task AcknowledgeSecurityNoticeAsync(bool doNotDisplayAgain, CancellationToken cancellationToken = default);
     Task DeleteAccountAsync(CancellationToken cancellationToken = default);
 }
 
