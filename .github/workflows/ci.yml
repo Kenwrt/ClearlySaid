@@ -1,0 +1,27 @@
+name: ClearlySaid CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [develop, "codex/**", "release/**", "hotfix/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  release-builds:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore Web
+        run: dotnet restore src/ClearlySaid.Web/ClearlySaid.Web.csproj --configfile NuGet.Config
+      - name: Build Web Release
+        run: dotnet build src/ClearlySaid.Web/ClearlySaid.Web.csproj --configuration Release --no-restore
+      - name: Restore API
+        run: dotnet restore src/ClearlySaid.Api/ClearlySaid.Api.csproj --configfile NuGet.Config
+      - name: Build API Release
+        run: dotnet build src/ClearlySaid.Api/ClearlySaid.Api.csproj --configuration Release --no-restore
