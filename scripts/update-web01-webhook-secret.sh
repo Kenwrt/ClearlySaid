@@ -45,6 +45,9 @@ docker stop "${current_name}" >/dev/null
 docker rename "${current_name}" "${backup_name}"
 
 docker run --detach \
+  --log-driver local \
+  --log-opt max-size=10m \
+  --log-opt max-file=5 \
   --name "${current_name}" \
   --restart unless-stopped \
   --publish 5102:8080 \

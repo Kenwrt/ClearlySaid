@@ -31,7 +31,17 @@ public sealed class OllamaTextRefinementProvider(
                 "The Ollama availability circuit is open.");
         }
 
-        await EnsureAvailableAsync(client, cancellationToken);
+        var preflightStopwatch = Stopwatch.StartNew();
+        try
+        {
+            await EnsureAvailableAsync(client, cancellationToken);
+            preflightStopwatch.Stop();
+        }
+        catch (DefiniteProviderFailureException exception)
+        {
+            exception.Data["PreflightLatencyMilliseconds"] = preflightStopwatch.ElapsedMilliseconds;
+            throw;
+        }
 
         var request = new
         {
@@ -99,7 +109,14 @@ public sealed class OllamaTextRefinementProvider(
                     RefinementPrompt.NormalizeOutput(output),
                     Name,
                     Model,
-                    stopwatch.ElapsedMilliseconds);
+                    stopwatch.ElapsedMilliseconds,
+                    DiagnosticEvents:
+                    [
+                        new("OllamaPreflightCompleted", Name, Model,
+                            preflightStopwatch.ElapsedMilliseconds, true, false),
+                        new("OllamaProcessingCompleted", Name, Model,
+                            stopwatch.ElapsedMilliseconds, true, false)
+                    ]);
             }
             catch (JsonException exception)
             {

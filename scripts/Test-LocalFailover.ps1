@@ -69,7 +69,7 @@ try {
 
     $apiLogs = & $docker @composeArguments logs api 2>&1 | Out-String
     if ($apiLogs -notmatch "using OpenAI fallback" -or
-        $apiLogs -notmatch "availability circuit is open") {
+        $apiLogs -notmatch "OLLAMA_CIRCUIT_OPEN") {
         throw "The API logs did not confirm both fallback selection and an open circuit."
     }
 

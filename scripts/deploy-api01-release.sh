@@ -26,6 +26,9 @@ trap rollback ERR
 docker run --detach \
   --name "${current_name}" \
   --restart unless-stopped \
+  --log-driver local \
+  --log-opt max-size=10m \
+  --log-opt max-file=5 \
   --env-file "${api_env}" \
   --publish 10.168.168.7:5103:8080 \
   "${new_image}" >/dev/null

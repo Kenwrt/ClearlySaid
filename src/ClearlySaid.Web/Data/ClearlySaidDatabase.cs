@@ -677,6 +677,49 @@ public sealed partial class ClearlySaidDatabase(
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task RecordRefinementDiagnosticAsync(
+        string eventName, Guid userId, Guid requestId, string? provider, string? model,
+        long? latencyMilliseconds, bool succeeded, bool fallbackUsed, string? failureCode,
+        CancellationToken cancellationToken)
+    {
+        string[] allowedEvents = [
+            "RequestAccepted", "OllamaPreflightCompleted", "OllamaProcessingCompleted",
+            "OpenAIFallbackStarted", "OpenAIFallbackCompleted", "RequestCompleted", "RequestFailed"];
+        if (!allowedEvents.Contains(eventName, StringComparer.Ordinal))
+        {
+            throw new ArgumentOutOfRangeException(nameof(eventName));
+        }
+
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO clearlysaid_diagnostic_events
+                (severity, category, event_name, message, user_id, request_id,
+                 provider, model, latency_milliseconds, succeeded, fallback_used, failure_code)
+            VALUES (@severity, 'Refinement', @eventName, '', @userId, @requestId,
+                    @provider, @model, @latency, @succeeded, @fallbackUsed, @failureCode);
+            """;
+        command.Parameters.AddWithValue("severity", succeeded ? "Information" : "Error");
+        command.Parameters.AddWithValue("eventName", eventName);
+        command.Parameters.AddWithValue("userId", userId);
+        command.Parameters.AddWithValue("requestId", requestId);
+        command.Parameters.AddWithValue("provider", (object?)provider ?? DBNull.Value);
+        command.Parameters.AddWithValue("model", (object?)model ?? DBNull.Value);
+        command.Parameters.AddWithValue("latency", (object?)latencyMilliseconds ?? DBNull.Value);
+        command.Parameters.AddWithValue("succeeded", succeeded);
+        command.Parameters.AddWithValue("fallbackUsed", fallbackUsed);
+        command.Parameters.AddWithValue("failureCode", (object?)NormalizeFailureCode(failureCode) ?? DBNull.Value);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task DeleteExpiredDiagnosticsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM clearlysaid_diagnostic_events WHERE occurred_at < now() - interval '14 days';";
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<AdminDiagnosticEvent>> GetAdminDiagnosticsAsync(
         int limit,
         CancellationToken cancellationToken)
@@ -695,8 +738,8 @@ public sealed partial class ClearlySaidDatabase(
             UNION ALL
             SELECT -d.id, d.occurred_at, d.severity, d.category, d.event_name, u.email,
                    d.request_id, NULL::integer, NULL::integer, NULL::integer,
-                   NULL::text, NULL::text, NULL::bigint,
-                   d.severity NOT IN ('Error', 'Critical'), false, d.message
+                   d.provider, d.model, d.latency_milliseconds,
+                   d.succeeded, d.fallback_used, coalesce(d.failure_code, nullif(d.message, ''))
             FROM clearlysaid_diagnostic_events d
             LEFT JOIN clearlysaid_users u ON u.id = d.user_id
             ORDER BY 2 DESC
@@ -902,6 +945,20 @@ public sealed partial class ClearlySaidDatabase(
         reader.IsDBNull(7) ? null : reader.GetString(7), reader.GetBoolean(8));
 
     private static string NormalizeEmail(string email) => email.Trim().ToUpperInvariant();
+
+    private static string? NormalizeFailureCode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = new string(value.Trim().ToUpperInvariant()
+            .Where(character => char.IsAsciiLetterOrDigit(character) || character == '_')
+            .Take(80)
+            .ToArray());
+        return normalized.Length == 0 ? "PROVIDER_FAILURE" : normalized;
+    }
     private static byte[] HashToken(string token) => SHA256.HashData(Encoding.UTF8.GetBytes(token));
 
     private const string AccountSql = """
@@ -1045,6 +1102,12 @@ public sealed partial class ClearlySaidDatabase(
             user_id uuid NULL REFERENCES clearlysaid_users(id) ON DELETE SET NULL,
             request_id uuid NULL
         );
+        ALTER TABLE clearlysaid_diagnostic_events ADD COLUMN IF NOT EXISTS provider text NULL;
+        ALTER TABLE clearlysaid_diagnostic_events ADD COLUMN IF NOT EXISTS model text NULL;
+        ALTER TABLE clearlysaid_diagnostic_events ADD COLUMN IF NOT EXISTS latency_milliseconds bigint NULL;
+        ALTER TABLE clearlysaid_diagnostic_events ADD COLUMN IF NOT EXISTS succeeded boolean NOT NULL DEFAULT true;
+        ALTER TABLE clearlysaid_diagnostic_events ADD COLUMN IF NOT EXISTS fallback_used boolean NOT NULL DEFAULT false;
+        ALTER TABLE clearlysaid_diagnostic_events ADD COLUMN IF NOT EXISTS failure_code text NULL;
         CREATE INDEX IF NOT EXISTS ix_clearlysaid_diagnostics_time
             ON clearlysaid_diagnostic_events(occurred_at DESC);
         """;

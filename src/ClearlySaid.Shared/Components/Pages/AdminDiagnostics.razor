@@ -6,7 +6,7 @@
 <PageTitle>Diagnostics - ClearlySaid Admin</PageTitle>
 
 <main class="cs-admin-page">
-    <header class="cs-admin-header"><div><h1>Diagnostics</h1><p>Submission routing, performance, fallback usage, and application failures. Message text is never recorded.</p></div><a href="/admin">Admin console</a></header>
+    <header class="cs-admin-header"><div><h1>Diagnostics</h1><p>Submission routing, performance, fallback usage, and application failures. Detailed events are retained for 14 days. Message text and rewritten responses are never recorded.</p></div><a href="/admin">Admin console</a></header>
     @if (!ready) { <p>Loading…</p> }
     else if (AccountService.CurrentAccount?.Role != AccountRoles.Admin) { <section class="cs-admin-card"><h2>Access denied</h2></section> }
     else
@@ -19,7 +19,7 @@
             <div><strong>@events.Count(x => !x.Succeeded)</strong><span>failures</span></div>
         </section>
         <section class="cs-admin-card cs-admin-toolbar">
-            <label>Filter<input placeholder="Email, provider, event, or error" @bind="filter" @bind:event="oninput" /></label>
+            <label>Filter<input placeholder="Request ID, user, provider, event, or failure code" @bind="filter" @bind:event="oninput" /></label>
             <label>Severity<select @bind="severity"><option value="">All</option><option>Information</option><option>Error</option><option>Critical</option></select></label>
             <label class="cs-admin-check"><input type="checkbox" @bind="autoRefresh" /> Auto-refresh</label>
             <button class="cs-button cs-button-secondary" disabled="@busy" @onclick="LoadAsync">Refresh</button>
@@ -52,7 +52,7 @@
     private readonly CancellationTokenSource refreshCancellation = new();
     private IEnumerable<AdminDiagnosticEvent> FilteredEvents => events.Where(x =>
         (string.IsNullOrEmpty(severity) || x.Severity == severity) &&
-        (string.IsNullOrWhiteSpace(filter) || string.Join(' ', x.EventName, x.Category, x.UserEmail, x.Provider, x.Model, x.Message).Contains(filter, StringComparison.OrdinalIgnoreCase)));
+        (string.IsNullOrWhiteSpace(filter) || string.Join(' ', x.EventName, x.Category, x.UserEmail, x.Provider, x.Model, x.Message, x.RequestId).Contains(filter, StringComparison.OrdinalIgnoreCase)));
     protected override async Task OnAfterRenderAsync(bool firstRender) { if(!firstRender)return; await AccountService.InitializeAsync(); if(AccountService.CurrentAccount?.Role==AccountRoles.Admin) { await LoadAsync(); _=RefreshLoopAsync(); } ready=true; StateHasChanged(); }
     private async Task LoadAsync() { try { busy=true; error=""; events=await AdminService.GetDiagnosticsAsync(); } catch(Exception ex) { error=ex.Message; } finally { busy=false; } }
     private async Task RefreshLoopAsync() { try { using var timer=new PeriodicTimer(TimeSpan.FromSeconds(10)); while(await timer.WaitForNextTickAsync(refreshCancellation.Token)) { if(autoRefresh && !busy) await InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); }); } } catch(OperationCanceledException) { } }

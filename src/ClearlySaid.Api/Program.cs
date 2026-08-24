@@ -97,7 +97,8 @@ app.MapPost("/api/messages/refine", async (
             result.LatencyMilliseconds,
             result.FallbackUsed,
             result.FailureReason,
-            EstimateTokens(request.Message)));
+            EstimateTokens(request.Message),
+            result.DiagnosticEvents));
     }
     catch (OpenAiConfigurationException exception)
     {
