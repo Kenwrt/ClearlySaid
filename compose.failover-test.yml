@@ -1,0 +1,12 @@
+services:
+  api:
+    image: clearlysaid-staging-api:latest
+    ports:
+      - "127.0.0.1:5203:8080"
+    environment:
+      Ollama__BaseUrl: http://192.0.2.1:11434/
+      Ollama__TimeoutSeconds: 1
+      Ollama__PreflightTimeoutMilliseconds: 250
+      Ollama__CircuitBreakSeconds: 30
+      Routing__OpenAiFallbackEnabled: "true"
+      OPENAI_API_KEY: ""

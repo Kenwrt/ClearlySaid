@@ -17,6 +17,7 @@ cd C:\Dev\ClearlySaid
 .\scripts\Initialize-LocalStaging.ps1
 .\scripts\Start-LocalStaging.ps1
 .\scripts\Test-LocalStaging.ps1
+.\scripts\Test-LocalFailover.ps1
 ```
 
 The default URL is `http://localhost:5202`. Random local credentials are written to
@@ -26,6 +27,12 @@ The credentials are not printed.
 OpenAI fallback and production billing, email, Google Play, and database credentials
 are not configured. Change the Ollama URL in the local environment file only when a
 non-production message-processing test is required.
+
+The failover test starts a temporary API container on loopback port 5203, injects a
+definite Ollama preflight failure, verifies selection of the OpenAI path, verifies the
+open circuit on a second request, and removes the temporary container. It does not stop
+or reconfigure the production Ollama process and does not require or transmit an OpenAI
+key.
 
 ## Stop
 

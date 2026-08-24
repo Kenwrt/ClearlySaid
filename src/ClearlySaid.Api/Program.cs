@@ -21,6 +21,8 @@ builder.Services.AddHttpClient("Ollama", client =>
 builder.Services.AddScoped<OllamaTextRefinementProvider>();
 builder.Services.AddScoped<OpenAiTextRefinementProvider>();
 builder.Services.AddScoped<ITextRefinementProvider, FallbackTextRefinementProvider>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<OllamaAvailabilityCircuit>();
 builder.Services.AddHostedService<OllamaModelWarmupService>();
 
 var app = builder.Build();
