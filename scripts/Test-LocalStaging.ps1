@@ -13,6 +13,12 @@ $baseUrl = "http://localhost:$port"
 $health = Invoke-WebRequest -UseBasicParsing "$baseUrl/health"
 if ($health.StatusCode -ne 200) { throw "Local staging health check failed." }
 
+$internalHealth = Invoke-WebRequest -UseBasicParsing "$baseUrl/health" `
+    -Headers @{ Host = "web:8080" }
+if ($internalHealth.StatusCode -ne 200) {
+    throw "Local staging rejected its internal Docker hostname."
+}
+
 foreach ($test in @(
     @{ Method = "Get"; Uri = "$baseUrl/downloads/ClearlySaid-Android-Test.apk" },
     @{ Method = "Post"; Uri = "$baseUrl/api/messages/refine" }
