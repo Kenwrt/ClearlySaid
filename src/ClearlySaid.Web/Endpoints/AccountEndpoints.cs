@@ -29,6 +29,7 @@ public static class AccountEndpoints
         RegisterRequest request,
         ClearlySaidDatabase database,
         TransactionalEmailService emailService,
+        IWebHostEnvironment environment,
         CancellationToken cancellationToken)
     {
         if (!IsValidEmail(request.Email))
@@ -47,6 +48,14 @@ public static class AccountEndpoints
         if (result is null)
             return Results.Problem("An account with that email already exists.", statusCode: StatusCodes.Status409Conflict);
         var activation = await database.CreateAccountTokenAsync(result.Email, "verify_email", TimeSpan.FromHours(24), true, cancellationToken);
+
+        if (environment.IsStaging() && !emailService.IsConfigured)
+        {
+            await database.VerifyEmailAsync(activation.Token, cancellationToken);
+            return Results.Accepted(value: new RegistrationResponse(
+                "Your local staging account is ready. You can sign in."));
+        }
+
         await emailService.SendVerificationAsync(result.Email, activation.Token, cancellationToken);
         return Results.Accepted(value: new RegistrationResponse("Check your email to activate your ClearlySaid account."));
     }

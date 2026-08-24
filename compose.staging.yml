@@ -43,6 +43,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Staging
       PublicBaseUrl: http://localhost:${STAGING_WEB_PORT:-5202}/
+      InternalBaseUrl: http://web:8080/
       Api01__BaseUrl: http://api:8080/
       CLEARLYSAID_INTERNAL_API_TOKEN: ${STAGING_INTERNAL_API_TOKEN:?Run scripts/Initialize-LocalStaging.ps1 first}
       ConnectionStrings__ClearlySaid: Host=database;Port=5432;Database=clearlysaid_staging;Username=clearlysaid_staging;Password=${STAGING_DATABASE_PASSWORD};SSL Mode=Disable

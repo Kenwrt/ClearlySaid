@@ -28,4 +28,32 @@ foreach ($test in @(
     }
 }
 
-Write-Host "Local staging passed health and protected-route checks at $baseUrl."
+$testEmail = "staging-registration-$([Guid]::NewGuid().ToString('N'))@example.test"
+$testPassword = "LocalTest$([Guid]::NewGuid().ToString('N'))a"
+$registration = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/account/register" `
+    -ContentType "application/json" `
+    -Body (@{ email = $testEmail; password = $testPassword } | ConvertTo-Json)
+if ($registration.message -ne "Your local staging account is ready. You can sign in.") {
+    throw "Local staging registration did not auto-verify the test account."
+}
+
+$login = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/account/login" `
+    -ContentType "application/json" `
+    -Body (@{ email = $testEmail; password = $testPassword } | ConvertTo-Json)
+if ([string]::IsNullOrWhiteSpace($login.accessToken)) {
+    throw "Local staging login did not return an access token."
+}
+
+try {
+    $account = Invoke-RestMethod -Method Get -Uri "$baseUrl/api/account/me" `
+        -Headers @{ Authorization = "Bearer $($login.accessToken)" }
+    if ($account.email -ne $testEmail) {
+        throw "Local staging returned the wrong test account."
+    }
+}
+finally {
+    Invoke-RestMethod -Method Delete -Uri "$baseUrl/api/account" `
+        -Headers @{ Authorization = "Bearer $($login.accessToken)" } | Out-Null
+}
+
+Write-Host "Local staging passed health, protected-route, registration, and login checks at $baseUrl."
