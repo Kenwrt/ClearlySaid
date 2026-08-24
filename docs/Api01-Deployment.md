@@ -33,6 +33,8 @@ OPENAI_API_KEY=<openai-api-key>
 Ollama__BaseUrl=http://10.168.168.5:11434/
 Ollama__Model=qwen3-vl:4b-instruct
 Ollama__TimeoutSeconds=25
+Ollama__PreflightTimeoutMilliseconds=1500
+Ollama__CircuitBreakSeconds=30
 Ollama__KeepAlive=-1
 Ollama__MaximumOutputTokens=128
 Routing__OpenAiFallbackEnabled=true
@@ -40,6 +42,11 @@ Routing__OpenAiFallbackEnabled=true
 
 `Ollama__KeepAlive=-1` keeps the model resident in GPU memory. API01 also warms the
 model during application startup so the first user request does not pay the model-load cost.
+
+Before submitting message text, API01 performs a short Ollama availability check. A
+definite preflight failure opens a temporary circuit and routes eligible requests to
+OpenAI. Timeouts after message submission remain ambiguous and do not automatically
+retry through another provider, which prevents duplicate processing.
 
 Use mode `600` on the file. Enter the OpenAI key using hidden terminal input so it isn't stored in shell history.
 

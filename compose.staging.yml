@@ -1,0 +1,75 @@
+name: clearlysaid-staging
+
+services:
+  database:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: clearlysaid_staging
+      POSTGRES_USER: clearlysaid_staging
+      POSTGRES_PASSWORD: ${STAGING_DATABASE_PASSWORD:?Run scripts/Initialize-LocalStaging.ps1 first}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clearlysaid_staging -d clearlysaid_staging"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - staging-database:/var/lib/postgresql/data
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api01
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Staging
+      CLEARLYSAID_INTERNAL_API_TOKEN: ${STAGING_INTERNAL_API_TOKEN:?Run scripts/Initialize-LocalStaging.ps1 first}
+      Ollama__BaseUrl: ${STAGING_OLLAMA_BASE_URL:-http://host.docker.internal:11434/}
+      Ollama__Model: ${STAGING_OLLAMA_MODEL:-qwen3-vl:4b-instruct}
+      Routing__OpenAiFallbackEnabled: "false"
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web01
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      api:
+        condition: service_started
+    ports:
+      - "127.0.0.1:${STAGING_WEB_PORT:-5202}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Staging
+      PublicBaseUrl: http://localhost:${STAGING_WEB_PORT:-5202}/
+      InternalBaseUrl: http://web:8080/
+      Api01__BaseUrl: http://api:8080/
+      CLEARLYSAID_INTERNAL_API_TOKEN: ${STAGING_INTERNAL_API_TOKEN:?Run scripts/Initialize-LocalStaging.ps1 first}
+      ConnectionStrings__ClearlySaid: Host=database;Port=5432;Database=clearlysaid_staging;Username=clearlysaid_staging;Password=${STAGING_DATABASE_PASSWORD};SSL Mode=Disable
+      AllowedHosts: localhost;127.0.0.1;web
+      Cloudflare__TrustConnectingIpHeader: "false"
+      Stripe__SecretKey: ""
+      Stripe__WebhookSecret: ""
+      Resend__ApiKey: ""
+    volumes:
+      - staging-data-protection:/var/lib/clearlysaid
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  staging-database:
+  staging-data-protection:

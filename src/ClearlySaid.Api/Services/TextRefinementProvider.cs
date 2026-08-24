@@ -19,7 +19,8 @@ public sealed record TextRefinementResult(
     string Model,
     long LatencyMilliseconds,
     bool FallbackUsed = false,
-    string? FailureReason = null);
+    string? FailureReason = null,
+    IReadOnlyList<RefinementDiagnosticEvent>? DiagnosticEvents = null);
 
 public class TextRefinementProviderException(string message, Exception? innerException = null)
     : Exception(message, innerException);

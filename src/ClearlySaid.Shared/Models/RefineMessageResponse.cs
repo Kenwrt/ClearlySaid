@@ -8,4 +8,14 @@ public sealed record RefineMessageResponse(
     long? LatencyMilliseconds = null,
     bool FallbackUsed = false,
     string? FailureReason = null,
-    int? EstimatedInputTokens = null);
+    int? EstimatedInputTokens = null,
+    IReadOnlyList<RefinementDiagnosticEvent>? DiagnosticEvents = null);
+
+public sealed record RefinementDiagnosticEvent(
+    string EventName,
+    string Provider,
+    string? Model,
+    long LatencyMilliseconds,
+    bool Succeeded,
+    bool FallbackUsed,
+    string? FailureCode = null);

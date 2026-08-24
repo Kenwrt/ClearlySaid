@@ -81,7 +81,10 @@ public sealed class OpenAiTextRefinementProvider(
                 RefinementPrompt.NormalizeOutput(output),
                 Name,
                 Model,
-                stopwatch.ElapsedMilliseconds);
+                stopwatch.ElapsedMilliseconds,
+                DiagnosticEvents:
+                [new("OpenAIFallbackCompleted", Name, Model,
+                    stopwatch.ElapsedMilliseconds, true, true)]);
         }
     }
 

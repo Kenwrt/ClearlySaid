@@ -8,6 +8,7 @@ namespace ClearlySaid.Api.Services;
 public sealed class OllamaTextRefinementProvider(
     IHttpClientFactory httpClientFactory,
     IConfiguration configuration,
+    OllamaAvailabilityCircuit availabilityCircuit,
     ILogger<OllamaTextRefinementProvider> logger) : ITextRefinementProvider
 {
     public string Name => "ollama";
@@ -23,6 +24,25 @@ public sealed class OllamaTextRefinementProvider(
     {
         var stopwatch = Stopwatch.StartNew();
         var client = httpClientFactory.CreateClient("Ollama");
+
+        if (availabilityCircuit.IsOpen)
+        {
+            throw new DefiniteProviderFailureException(
+                "The Ollama availability circuit is open.");
+        }
+
+        var preflightStopwatch = Stopwatch.StartNew();
+        try
+        {
+            await EnsureAvailableAsync(client, cancellationToken);
+            preflightStopwatch.Stop();
+        }
+        catch (DefiniteProviderFailureException exception)
+        {
+            exception.Data["PreflightLatencyMilliseconds"] = preflightStopwatch.ElapsedMilliseconds;
+            throw;
+        }
+
         var request = new
         {
             model = Model,
@@ -48,6 +68,7 @@ public sealed class OllamaTextRefinementProvider(
             exception.HttpRequestError is HttpRequestError.ConnectionError or
                 HttpRequestError.NameResolutionError)
         {
+            availabilityCircuit.Open();
             throw new DefiniteProviderFailureException("The Ollama service could not be reached.", exception);
         }
         catch (HttpRequestException exception)
@@ -65,6 +86,7 @@ public sealed class OllamaTextRefinementProvider(
                     "Ollama failed request {RequestId} with HTTP {StatusCode}.",
                     requestId,
                     response.StatusCode);
+                availabilityCircuit.Open();
                 throw new DefiniteProviderFailureException(
                     $"Ollama returned HTTP {(int)response.StatusCode}.");
             }
@@ -87,12 +109,57 @@ public sealed class OllamaTextRefinementProvider(
                     RefinementPrompt.NormalizeOutput(output),
                     Name,
                     Model,
-                    stopwatch.ElapsedMilliseconds);
+                    stopwatch.ElapsedMilliseconds,
+                    DiagnosticEvents:
+                    [
+                        new("OllamaPreflightCompleted", Name, Model,
+                            preflightStopwatch.ElapsedMilliseconds, true, false),
+                        new("OllamaProcessingCompleted", Name, Model,
+                            stopwatch.ElapsedMilliseconds, true, false)
+                    ]);
             }
             catch (JsonException exception)
             {
                 throw new DefiniteProviderFailureException("Ollama returned an invalid response.", exception);
             }
+        }
+    }
+
+    private async Task EnsureAvailableAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        var timeout = TimeSpan.FromMilliseconds(
+            Math.Max(100, configuration.GetValue("Ollama:PreflightTimeoutMilliseconds", 1500)));
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(timeout);
+
+        try
+        {
+            using var response = await client.GetAsync(
+                "api/tags",
+                HttpCompletionOption.ResponseHeadersRead,
+                timeoutSource.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                availabilityCircuit.Open();
+                throw new DefiniteProviderFailureException(
+                    $"The Ollama availability check returned HTTP {(int)response.StatusCode}.");
+            }
+
+            availabilityCircuit.Close();
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            availabilityCircuit.Open();
+            throw new DefiniteProviderFailureException(
+                "The Ollama availability check timed out before message submission.",
+                exception);
+        }
+        catch (HttpRequestException exception)
+        {
+            availabilityCircuit.Open();
+            throw new DefiniteProviderFailureException(
+                "The Ollama service could not be reached before message submission.",
+                exception);
         }
     }
 

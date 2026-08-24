@@ -40,6 +40,9 @@ fi
 docker run --detach \
   --name "${current_name}" \
   --restart unless-stopped \
+  --log-driver local \
+  --log-opt max-size=10m \
+  --log-opt max-file=5 \
   --publish 5102:8080 \
   --volume clearlysaid-data:/var/lib/clearlysaid \
   --env-file "${web_env}" \

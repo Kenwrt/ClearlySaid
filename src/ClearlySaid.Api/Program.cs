@@ -21,6 +21,8 @@ builder.Services.AddHttpClient("Ollama", client =>
 builder.Services.AddScoped<OllamaTextRefinementProvider>();
 builder.Services.AddScoped<OpenAiTextRefinementProvider>();
 builder.Services.AddScoped<ITextRefinementProvider, FallbackTextRefinementProvider>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<OllamaAvailabilityCircuit>();
 builder.Services.AddHostedService<OllamaModelWarmupService>();
 
 var app = builder.Build();
@@ -95,7 +97,8 @@ app.MapPost("/api/messages/refine", async (
             result.LatencyMilliseconds,
             result.FallbackUsed,
             result.FailureReason,
-            EstimateTokens(request.Message)));
+            EstimateTokens(request.Message),
+            result.DiagnosticEvents));
     }
     catch (OpenAiConfigurationException exception)
     {

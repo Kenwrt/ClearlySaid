@@ -48,10 +48,14 @@ builder.Services.AddScoped<IBillingService, StripeWebBillingService>();
 builder.Services.AddScoped<IRegistrationSuccessTracker, MetaPixelRegistrationSuccessTracker>();
 builder.Services.AddScoped<Api01MessageRefinementService>();
 builder.Services.AddSingleton<ActiveRefinementRequests>();
+builder.Services.AddHostedService<DiagnosticRetentionService>();
 builder.Services.AddScoped<IDictationService, BrowserDictationService>();
 builder.Services.AddHttpClient("Public", client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["PublicBaseUrl"] ?? "https://clearlysaid.ai/");
+    client.BaseAddress = new Uri(
+        builder.Configuration["InternalBaseUrl"] ??
+        builder.Configuration["PublicBaseUrl"] ??
+        "https://clearlysaid.ai/");
     client.Timeout = TimeSpan.FromSeconds(35);
 });
 builder.Services.AddHttpClient("Resend", client =>
@@ -263,6 +267,10 @@ app.MapPost("/api/messages/refine", async (
                 statusCode: StatusCodes.Status429TooManyRequests);
         }
 
+        await database.RecordRefinementDiagnosticAsync(
+            "RequestAccepted", user.Id, requestId, null, null, null,
+            true, false, null, cancellationToken);
+
         try
         {
             var result = await refinementService.RefineWithMetadataAsync(
@@ -271,17 +279,38 @@ app.MapPost("/api/messages/refine", async (
                 user.Id,
                 style,
                 cancellationToken);
+            if (result.DiagnosticEvents is not null)
+            {
+                foreach (var diagnosticEvent in result.DiagnosticEvents)
+                {
+                    await database.RecordRefinementDiagnosticAsync(
+                        diagnosticEvent.EventName, user.Id, requestId,
+                        diagnosticEvent.Provider, diagnosticEvent.Model,
+                        diagnosticEvent.LatencyMilliseconds, diagnosticEvent.Succeeded,
+                        diagnosticEvent.FallbackUsed, diagnosticEvent.FailureCode,
+                        cancellationToken);
+                }
+            }
             await database.CompleteUsageAsync(reservation.UsageId.Value, result, cancellationToken);
+            await database.RecordRefinementDiagnosticAsync(
+                "RequestCompleted", user.Id, requestId, result.Provider, result.Model,
+                result.LatencyMilliseconds, true, result.FallbackUsed, null, cancellationToken);
             return Results.Ok(result);
         }
         catch (Api01ConfigurationException exception)
         {
             await database.ReleaseUsageAsync(reservation.UsageId.Value, exception.Message, cancellationToken);
+            await database.RecordRefinementDiagnosticAsync(
+                "RequestFailed", user.Id, requestId, null, null, null,
+                false, false, "API_CONFIGURATION_ERROR", cancellationToken);
             return Results.Problem(exception.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
         }
         catch (Api01ServiceException exception)
         {
             await database.ReleaseUsageAsync(reservation.UsageId.Value, exception.Message, cancellationToken);
+            await database.RecordRefinementDiagnosticAsync(
+                "RequestFailed", user.Id, requestId, null, null, null,
+                false, false, "API_SERVICE_ERROR", cancellationToken);
             return Results.Problem(exception.Message, statusCode: StatusCodes.Status502BadGateway);
         }
         catch
