@@ -27,6 +27,14 @@ input { box-sizing: border-box; }
 
 .cs-legal h1 { line-height: 1.15; }
 .cs-legal a { color: #4c55c8; }
+.cs-profile { max-width: 760px; }
+.cs-profile-card { display: grid; gap: .8rem; background: #fff; border: 1px solid #dde1ec; border-radius: 18px; padding: 1.4rem; }
+.cs-profile-card label { font-weight: 700; }
+.cs-profile-card input[type="tel"] { min-height: 48px; border: 1px solid #cbd1de; border-radius: 10px; padding: .7rem .85rem; font: inherit; }
+.cs-profile-check { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: .65rem; font-weight: 400 !important; line-height: 1.45; }
+.cs-profile-check input { width: 1.1rem; height: 1.1rem; margin-top: .2rem; }
+.cs-profile-status { border-radius: 10px; background: #eef5ff; padding: .8rem; }
+.cs-profile-fine-print { font-size: .9rem; color: #596176; }
 
 .cs-danger-button {
     min-height: 3rem;

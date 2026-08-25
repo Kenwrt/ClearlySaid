@@ -19,6 +19,7 @@ public static class AccountEndpoints
         endpoints.MapGet("/api/account/me", GetAccountAsync);
         endpoints.MapPost("/api/account/logout", LogoutAsync);
         endpoints.MapPost("/api/account/security-notice/acknowledge", AcknowledgeSecurityNoticeAsync);
+        endpoints.MapPut("/api/account/profile/phone", UpdatePhoneProfileAsync).RequireRateLimiting("account");
         endpoints.MapDelete("/api/account", DeleteAccountAsync);
         endpoints.MapGet("/api/subscriptions/plans", GetSubscriptionPlans);
         endpoints.MapPost("/api/billing/google/verify", VerifyGooglePurchaseAsync);
@@ -181,6 +182,40 @@ public static class AccountEndpoints
         return Results.NoContent();
     }
 
+    private static async Task<IResult> UpdatePhoneProfileAsync(
+        HttpRequest request,
+        UpdatePhoneProfileRequest profile,
+        ClearlySaidDatabase database,
+        CancellationToken cancellationToken)
+    {
+        var user = await AuthenticateAsync(request, database, cancellationToken);
+        if (user is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        if (profile.GrantSmsConsent && profile.WithdrawSmsConsent)
+        {
+            return Results.Problem("Choose either consent or opt out, not both.", statusCode: 400);
+        }
+
+        var normalizedPhone = NormalizeNorthAmericanPhone(profile.PhoneNumber);
+        if (!string.IsNullOrWhiteSpace(profile.PhoneNumber) && normalizedPhone is null)
+        {
+            return Results.Problem(
+                "Enter a valid 10-digit US or Canadian mobile number.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        if (profile.GrantSmsConsent && normalizedPhone is null)
+        {
+            return Results.Problem("Enter a mobile number before providing text-message consent.", statusCode: 400);
+        }
+
+        return Results.Ok(await database.UpdatePhoneProfileAsync(
+            user.Id, normalizedPhone, profile.GrantSmsConsent, profile.WithdrawSmsConsent, cancellationToken));
+    }
+
     private static async Task<IResult> VerifyGooglePurchaseAsync(
         HttpRequest request,
         GooglePurchaseVerificationRequest purchase,
@@ -236,4 +271,14 @@ public static class AccountEndpoints
     private static bool IsValidPassword(string password) =>
         password is { Length: >= 12 } &&
         password.Any(char.IsUpper) && password.Any(char.IsLower) && password.Any(char.IsDigit);
+
+    private static string? NormalizeNorthAmericanPhone(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var digits = new string(value.Where(char.IsDigit).ToArray());
+        if (digits.Length == 11 && digits[0] == '1') digits = digits[1..];
+        return digits.Length == 10 && digits[0] is >= '2' and <= '9'
+            ? $"+1{digits}"
+            : null;
+    }
 }

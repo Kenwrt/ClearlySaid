@@ -1,0 +1,120 @@
+@page "/account/profile"
+@using ClearlySaid.Shared.Models
+@using ClearlySaid.Shared.Services
+@inject IAccountService AccountService
+@inject NavigationManager Navigation
+
+<PageTitle>Profile - ClearlySaid</PageTitle>
+
+<main class="cs-legal cs-profile">
+    <h1>Your profile</h1>
+
+    @if (!AccountService.IsInitialized)
+    {
+        <p>Loading your profile...</p>
+    }
+    else if (AccountService.CurrentAccount is null)
+    {
+        <p>Sign in before updating your profile.</p>
+        <p><a href="/">Return to sign in</a></p>
+    }
+    else
+    {
+        <section class="cs-profile-card" aria-labelledby="mobile-heading">
+            <h2 id="mobile-heading">Mobile number and text messages</h2>
+            <p>Adding a mobile number is optional. ClearlySaid does not send text messages yet. Your number will require verification before future messages can be enabled.</p>
+
+            <label for="profile-phone">US or Canadian mobile number</label>
+            <input id="profile-phone" type="tel" autocomplete="tel" inputmode="tel"
+                   placeholder="(555) 555-0123" @bind="phoneNumber" />
+            <small>We store the number in international format. Standard message and data rates may apply when messaging is enabled.</small>
+
+            @if (HasActiveOrPendingConsent)
+            {
+                <div class="cs-profile-status" role="status">
+                    <strong>Consent status:</strong> @ConsentStatusText
+                </div>
+                <label class="cs-profile-check">
+                    <input type="checkbox" @bind="withdrawConsent" />
+                    Stop future text messages and withdraw my consent.
+                </label>
+            }
+            else
+            {
+                <label class="cs-profile-check">
+                    <input type="checkbox" @bind="grantConsent" />
+                    I agree to receive account and service text messages from ClearlySaid at the mobile number provided. Message frequency varies. Message and data rates may apply. Consent is not a condition of purchase. Reply STOP to opt out and HELP for help. This does not include marketing messages.
+                </label>
+            }
+
+            <p class="cs-profile-fine-print">Review the <a href="/privacy">Privacy Policy</a>. ClearlySaid will record the date, consent wording version, source, and consent status. Saving a phone number without selecting the consent checkbox does not authorize text messages.</p>
+
+            @if (!string.IsNullOrWhiteSpace(notice))
+            {
+                <p class="cs-billing-notice" role="status">@notice</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(error))
+            {
+                <p class="cs-error" role="alert">@error</p>
+            }
+
+            <button class="cs-button cs-button-primary" type="button" disabled="@busy" @onclick="SaveAsync">
+                @(busy ? "Saving..." : "Save profile")
+            </button>
+        </section>
+
+        <p><a href="/">Return to ClearlySaid</a></p>
+    }
+</main>
+
+@code {
+    private string phoneNumber = string.Empty;
+    private bool grantConsent;
+    private bool withdrawConsent;
+    private bool busy;
+    private string notice = string.Empty;
+    private string error = string.Empty;
+
+    private bool HasActiveOrPendingConsent => AccountService.CurrentAccount?.SmsConsentStatus is
+        SmsConsentStatuses.OptedIn or SmsConsentStatuses.PendingVerification;
+
+    private string ConsentStatusText => AccountService.CurrentAccount?.SmsConsentStatus switch
+    {
+        SmsConsentStatuses.PendingVerification => "Consent recorded, phone verification pending",
+        SmsConsentStatuses.OptedIn => "Opted in",
+        SmsConsentStatuses.OptedOut => "Opted out",
+        _ => "Not provided"
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await AccountService.InitializeAsync();
+        phoneNumber = AccountService.CurrentAccount?.PhoneNumber ?? string.Empty;
+        StateHasChanged();
+    }
+
+    private async Task SaveAsync()
+    {
+        busy = true;
+        notice = string.Empty;
+        error = string.Empty;
+        try
+        {
+            await AccountService.UpdatePhoneProfileAsync(
+                new UpdatePhoneProfileRequest(phoneNumber, grantConsent, withdrawConsent));
+            phoneNumber = AccountService.CurrentAccount?.PhoneNumber ?? string.Empty;
+            grantConsent = false;
+            withdrawConsent = false;
+            notice = "Your profile has been updated. No text message was sent.";
+        }
+        catch (AccountApiException exception)
+        {
+            error = exception.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

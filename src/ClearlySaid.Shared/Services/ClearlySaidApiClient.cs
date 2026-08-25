@@ -123,6 +123,24 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
         }
     }
 
+    public async Task UpdatePhoneProfileAsync(
+        UpdatePhoneProfileRequest profile,
+        CancellationToken cancellationToken = default)
+    {
+        var token = await tokenStore.GetAsync();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            throw new AccountApiException("Sign in to update your profile.");
+        }
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Put, "api/account/profile/phone", token);
+        request.Content = JsonContent.Create(profile);
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        SetAccount(await response.Content.ReadFromJsonAsync<AccountInfo>(cancellationToken)
+            ?? throw new AccountApiException("The account service returned an empty response."));
+    }
+
     public async Task DeleteAccountAsync(CancellationToken cancellationToken = default)
     {
         var token = await tokenStore.GetAsync();

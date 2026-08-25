@@ -804,12 +804,86 @@ public sealed partial class ClearlySaidDatabase(
             SET email = 'deleted-' || id::text || '@invalid.local',
                 normalized_email = 'DELETED-' || id::text,
                 password_hash = 'DELETED',
+                phone_e164 = NULL,
+                phone_verified_at = NULL,
+                sms_consent_status = 'NotProvided',
+                sms_consented_at = NULL,
                 disabled_at = now()
             WHERE id = @userId;
+            UPDATE clearlysaid_sms_consent_events SET phone_e164 = NULL WHERE user_id = @userId;
             UPDATE clearlysaid_access_tokens SET revoked_at = now() WHERE user_id = @userId;
             """;
         command.Parameters.AddWithValue("userId", userId);
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<AccountInfo> UpdatePhoneProfileAsync(
+        Guid userId,
+        string? phoneE164,
+        bool grantConsent,
+        bool withdrawConsent,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        string? existingPhone;
+        string existingStatus;
+        await using (var read = connection.CreateCommand())
+        {
+            read.Transaction = transaction;
+            read.CommandText = "SELECT phone_e164, sms_consent_status FROM clearlysaid_users WHERE id = @userId FOR UPDATE;";
+            read.Parameters.AddWithValue("userId", userId);
+            await using var reader = await read.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken)) throw new InvalidOperationException("The account could not be found.");
+            existingPhone = reader.IsDBNull(0) ? null : reader.GetString(0);
+            existingStatus = reader.GetString(1);
+        }
+
+        var phoneChanged = !string.Equals(existingPhone, phoneE164, StringComparison.Ordinal);
+        var status = grantConsent
+            ? SmsConsentStatuses.PendingVerification
+            : withdrawConsent || phoneChanged && existingStatus is SmsConsentStatuses.OptedIn or SmsConsentStatuses.PendingVerification
+                ? SmsConsentStatuses.OptedOut
+                : existingStatus;
+        if (phoneE164 is null) status = SmsConsentStatuses.NotProvided;
+
+        await using (var update = connection.CreateCommand())
+        {
+            update.Transaction = transaction;
+            update.CommandText = """
+                UPDATE clearlysaid_users
+                SET phone_e164 = @phone,
+                    phone_verified_at = CASE WHEN phone_e164 IS NOT DISTINCT FROM @phone THEN phone_verified_at ELSE NULL END,
+                    sms_consent_status = @status,
+                    sms_consented_at = CASE WHEN @grantConsent THEN now() WHEN @status = 'NotProvided' THEN NULL ELSE sms_consented_at END,
+                    sms_consent_version = CASE WHEN @grantConsent THEN 'account-service-v1' WHEN @status = 'NotProvided' THEN NULL ELSE sms_consent_version END
+                WHERE id = @userId;
+                """;
+            update.Parameters.AddWithValue("userId", userId);
+            update.Parameters.AddWithValue("phone", (object?)phoneE164 ?? DBNull.Value);
+            update.Parameters.AddWithValue("status", status);
+            update.Parameters.AddWithValue("grantConsent", grantConsent);
+            await update.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        if (phoneChanged || grantConsent || withdrawConsent)
+        {
+            await using var audit = connection.CreateCommand();
+            audit.Transaction = transaction;
+            audit.CommandText = """
+                INSERT INTO clearlysaid_sms_consent_events
+                    (id, user_id, phone_e164, event_type, consent_scope, disclosure_version, source)
+                VALUES (@id, @userId, @phone, @eventType, 'account_and_service', 'account-service-v1', 'WebProfile');
+                """;
+            audit.Parameters.AddWithValue("id", Guid.NewGuid());
+            audit.Parameters.AddWithValue("userId", userId);
+            audit.Parameters.AddWithValue("phone", (object?)phoneE164 ?? DBNull.Value);
+            audit.Parameters.AddWithValue("eventType", grantConsent ? "ConsentGranted" : withdrawConsent ? "ConsentWithdrawn" : "PhoneChanged");
+            await audit.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return await GetAccountAsync(userId, cancellationToken);
     }
 
     private async Task<(string Token, DateTimeOffset ExpiresAt)> CreateSessionAsync(
@@ -942,7 +1016,9 @@ public sealed partial class ClearlySaidDatabase(
     private static AccountInfo ReadAccount(NpgsqlDataReader reader) => new(
         reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetInt32(3),
         reader.GetInt32(4), reader.GetFieldValue<DateTimeOffset>(5), reader.GetString(6),
-        reader.IsDBNull(7) ? null : reader.GetString(7), reader.GetBoolean(8));
+        reader.IsDBNull(7) ? null : reader.GetString(7), reader.GetBoolean(8),
+        reader.IsDBNull(9) ? null : reader.GetString(9), !reader.IsDBNull(10), reader.GetString(11),
+        reader.IsDBNull(12) ? null : reader.GetFieldValue<DateTimeOffset>(12));
 
     private static string NormalizeEmail(string email) => email.Trim().ToUpperInvariant();
 
@@ -964,14 +1040,16 @@ public sealed partial class ClearlySaidDatabase(
     private const string AccountSql = """
         SELECT u.id, u.email, q.plan_id, q.monthly_allowance,
                count(e.id) FILTER (WHERE e.status IN ('reserved', 'completed'))::int AS used,
-               q.period_ends_at, u.role, q.provider, u.security_notice_dismissed
+               q.period_ends_at, u.role, q.provider, u.security_notice_dismissed,
+               u.phone_e164, u.phone_verified_at, u.sms_consent_status, u.sms_consented_at
         FROM clearlysaid_users u
         JOIN clearlysaid_entitlements q ON q.user_id = u.id
         LEFT JOIN clearlysaid_usage_events e ON e.user_id = u.id
              AND e.occurred_at >= q.period_started_at AND e.occurred_at < q.period_ends_at
         WHERE u.id = @userId
         GROUP BY u.id, u.email, q.plan_id, q.monthly_allowance, q.period_ends_at, u.role,
-                 q.provider, u.security_notice_dismissed;
+                 q.provider, u.security_notice_dismissed, u.phone_e164, u.phone_verified_at,
+                 u.sms_consent_status, u.sms_consented_at;
         """;
 
     private const string SchemaSql = """
@@ -987,6 +1065,23 @@ public sealed partial class ClearlySaidDatabase(
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS email_verified_at timestamptz NULL DEFAULT now();
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS last_login_at timestamptz NULL;
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS security_notice_dismissed boolean NOT NULL DEFAULT false;
+        ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS phone_e164 text NULL;
+        ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS phone_verified_at timestamptz NULL;
+        ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_consent_status text NOT NULL DEFAULT 'NotProvided';
+        ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_consented_at timestamptz NULL;
+        ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_consent_version text NULL;
+        CREATE TABLE IF NOT EXISTS clearlysaid_sms_consent_events (
+            id uuid PRIMARY KEY,
+            user_id uuid NOT NULL REFERENCES clearlysaid_users(id) ON DELETE CASCADE,
+            phone_e164 text NULL,
+            event_type text NOT NULL,
+            consent_scope text NOT NULL,
+            disclosure_version text NOT NULL,
+            source text NOT NULL,
+            occurred_at timestamptz NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS ix_clearlysaid_sms_consent_events_user
+            ON clearlysaid_sms_consent_events(user_id, occurred_at DESC);
         CREATE TABLE IF NOT EXISTS clearlysaid_security_notice_acknowledgements (
             id uuid PRIMARY KEY,
             user_id uuid NOT NULL REFERENCES clearlysaid_users(id) ON DELETE CASCADE,

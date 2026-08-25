@@ -19,6 +19,7 @@ public interface IAccountService
     Task RefreshAsync(CancellationToken cancellationToken = default);
     Task LogoutAsync(CancellationToken cancellationToken = default);
     Task AcknowledgeSecurityNoticeAsync(bool doNotDisplayAgain, CancellationToken cancellationToken = default);
+    Task UpdatePhoneProfileAsync(UpdatePhoneProfileRequest request, CancellationToken cancellationToken = default);
     Task DeleteAccountAsync(CancellationToken cancellationToken = default);
 }
 
