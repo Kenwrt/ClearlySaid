@@ -1,7 +1,10 @@
 using System.ComponentModel.DataAnnotations;
+using System.Security.Cryptography;
+using System.Text;
 using ClearlySaid.Shared.Models;
 using ClearlySaid.Web.Data;
 using ClearlySaid.Web.Services;
+using ClearlySaid.Web.Services.Messaging;
 
 namespace ClearlySaid.Web.Endpoints;
 
@@ -20,6 +23,8 @@ public static class AccountEndpoints
         endpoints.MapPost("/api/account/logout", LogoutAsync);
         endpoints.MapPost("/api/account/security-notice/acknowledge", AcknowledgeSecurityNoticeAsync);
         endpoints.MapPut("/api/account/profile/phone", UpdatePhoneProfileAsync).RequireRateLimiting("account");
+        endpoints.MapPost("/api/account/profile/phone/verification/send", ResendPhoneVerificationAsync).RequireRateLimiting("account");
+        endpoints.MapPost("/api/account/profile/phone/verify", VerifyPhoneAsync).RequireRateLimiting("account");
         endpoints.MapDelete("/api/account", DeleteAccountAsync);
         endpoints.MapGet("/api/subscriptions/plans", GetSubscriptionPlans);
         endpoints.MapPost("/api/billing/google/verify", VerifyGooglePurchaseAsync);
@@ -151,6 +156,7 @@ public static class AccountEndpoints
     private static async Task<IResult> DeleteAccountAsync(
         HttpRequest request,
         ClearlySaidDatabase database,
+        ISmsConsentSynchronizer consentSynchronizer,
         CancellationToken cancellationToken)
     {
         var user = await AuthenticateAsync(request, database, cancellationToken);
@@ -159,6 +165,9 @@ public static class AccountEndpoints
             return Results.Unauthorized();
         }
 
+        var account = await database.GetAccountAsync(user.Id, cancellationToken);
+        if (account.PhoneNumber is not null && account.SmsConsentStatus is SmsConsentStatuses.OptedIn or SmsConsentStatuses.PendingVerification)
+            await consentSynchronizer.SetConsentAsync(user.Id, account.PhoneNumber, false, cancellationToken);
         await database.DeleteAccountAsync(user.Id, cancellationToken);
         return Results.NoContent();
     }
@@ -186,6 +195,9 @@ public static class AccountEndpoints
         HttpRequest request,
         UpdatePhoneProfileRequest profile,
         ClearlySaidDatabase database,
+        ISmsMessageSender smsSender,
+        ISmsConsentSynchronizer consentSynchronizer,
+        IWebHostEnvironment environment,
         CancellationToken cancellationToken)
     {
         var user = await AuthenticateAsync(request, database, cancellationToken);
@@ -212,9 +224,104 @@ public static class AccountEndpoints
             return Results.Problem("Enter a mobile number before providing text-message consent.", statusCode: 400);
         }
 
-        return Results.Ok(await database.UpdatePhoneProfileAsync(
-            user.Id, normalizedPhone, profile.GrantSmsConsent, profile.WithdrawSmsConsent, cancellationToken));
+        var existing = await database.GetAccountAsync(user.Id, cancellationToken);
+        var updated = await database.UpdatePhoneProfileAsync(
+            user.Id, normalizedPhone, profile.GrantSmsConsent, profile.WithdrawSmsConsent, cancellationToken);
+
+        if (existing.PhoneNumber is not null &&
+            (!string.Equals(existing.PhoneNumber, normalizedPhone, StringComparison.Ordinal) || profile.WithdrawSmsConsent))
+        {
+            await consentSynchronizer.SetConsentAsync(user.Id, existing.PhoneNumber, false, cancellationToken);
+        }
+        if (normalizedPhone is not null)
+        {
+            await consentSynchronizer.SetConsentAsync(
+                user.Id, normalizedPhone, profile.GrantSmsConsent || updated.SmsConsentStatus == SmsConsentStatuses.OptedIn,
+                cancellationToken);
+        }
+
+        if (profile.GrantSmsConsent && normalizedPhone is not null)
+        {
+            if (!smsSender.IsConfigured && environment.IsProduction())
+                return Results.Problem("Text messaging is not configured.", statusCode: StatusCodes.Status503ServiceUnavailable);
+            if (smsSender.IsConfigured)
+            {
+                try
+                {
+                    await CreateAndSendPhoneVerificationAsync(user.Id, normalizedPhone, database, smsSender, cancellationToken);
+                }
+                catch
+                {
+                    await database.InvalidatePhoneVerificationAsync(user.Id, CancellationToken.None);
+                    return Results.Problem("Your consent was saved, but the verification text could not be sent. Try again.", statusCode: StatusCodes.Status502BadGateway);
+                }
+            }
+        }
+
+        return Results.Ok(updated);
     }
+
+    private static async Task<IResult> ResendPhoneVerificationAsync(
+        HttpRequest request, ClearlySaidDatabase database, ISmsMessageSender smsSender,
+        CancellationToken cancellationToken)
+    {
+        var user = await AuthenticateAsync(request, database, cancellationToken);
+        if (user is null) return Results.Unauthorized();
+        var account = await database.GetAccountAsync(user.Id, cancellationToken);
+        if (account.PhoneNumber is null || account.SmsConsentStatus != SmsConsentStatuses.PendingVerification)
+            return Results.Problem("No phone verification is pending.", statusCode: StatusCodes.Status409Conflict);
+        if (!smsSender.IsConfigured)
+            return Results.Problem("Text messaging is not configured.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        try
+        {
+            var expiresAt = await CreateAndSendPhoneVerificationAsync(
+                user.Id, account.PhoneNumber, database, smsSender, cancellationToken);
+            return Results.Ok(new SendPhoneVerificationResponse(expiresAt));
+        }
+        catch
+        {
+            await database.InvalidatePhoneVerificationAsync(user.Id, CancellationToken.None);
+            return Results.Problem("The verification text could not be sent. Try again.", statusCode: StatusCodes.Status502BadGateway);
+        }
+    }
+
+    private static async Task<IResult> VerifyPhoneAsync(
+        HttpRequest request, VerifyPhoneRequest verification, ClearlySaidDatabase database,
+        CancellationToken cancellationToken)
+    {
+        var user = await AuthenticateAsync(request, database, cancellationToken);
+        if (user is null) return Results.Unauthorized();
+        if (verification.Code is null || verification.Code.Length != 6 || !verification.Code.All(char.IsDigit))
+            return Results.Problem("Enter the six-digit verification code.", statusCode: StatusCodes.Status400BadRequest);
+        var salt = await database.GetPhoneVerificationSaltAsync(user.Id, cancellationToken);
+        if (salt is null)
+            return Results.Problem("The verification code is invalid or expired.", statusCode: StatusCodes.Status400BadRequest);
+        var account = await database.ConfirmPhoneVerificationAsync(
+            user.Id, HashVerificationCode(salt, verification.Code), cancellationToken);
+        return account is null
+            ? Results.Problem("The verification code is invalid or expired.", statusCode: StatusCodes.Status400BadRequest)
+            : Results.Ok(account);
+    }
+
+    private static async Task<DateTimeOffset> CreateAndSendPhoneVerificationAsync(
+        Guid userId, string destination, ClearlySaidDatabase database,
+        ISmsMessageSender sender, CancellationToken cancellationToken)
+    {
+        var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+        var salt = RandomNumberGenerator.GetBytes(32);
+        var expiresAt = await database.SavePhoneVerificationAsync(
+            userId, salt, HashVerificationCode(salt, code), TimeSpan.FromMinutes(10), cancellationToken);
+        await sender.SendAsync(new SmsMessage(
+            userId,
+            destination,
+            $"ClearlySaid verification code: {code}. Expires in 10 minutes. Do not share it. Reply STOP to opt out.",
+            SmsMessageCategories.AccountAndService,
+            $"clearlysaid:phone-verification:{userId:N}:{DateTimeOffset.UtcNow:yyyyMMddHHmm}"), cancellationToken);
+        return expiresAt;
+    }
+
+    private static byte[] HashVerificationCode(byte[] salt, string code) =>
+        SHA256.HashData([.. salt, .. Encoding.UTF8.GetBytes(code)]);
 
     private static async Task<IResult> VerifyGooglePurchaseAsync(
         HttpRequest request,

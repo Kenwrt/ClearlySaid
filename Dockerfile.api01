@@ -2,6 +2,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /source
 
 COPY NuGet.Config ./
+COPY packages/ packages/
 COPY src/ClearlySaid.Shared/ClearlySaid.Shared.csproj src/ClearlySaid.Shared/
 COPY src/ClearlySaid.Api/ClearlySaid.Api.csproj src/ClearlySaid.Api/
 RUN dotnet restore src/ClearlySaid.Api/ClearlySaid.Api.csproj --configfile NuGet.Config

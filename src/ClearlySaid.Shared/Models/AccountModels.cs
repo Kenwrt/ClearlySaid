@@ -11,6 +11,10 @@ public sealed record UpdatePhoneProfileRequest(
     bool GrantSmsConsent,
     bool WithdrawSmsConsent);
 
+public sealed record VerifyPhoneRequest(string Code);
+
+public sealed record SendPhoneVerificationResponse(DateTimeOffset ExpiresAt);
+
 public sealed record EmailRequest(string Email);
 
 public sealed record TokenRequest(string Token);

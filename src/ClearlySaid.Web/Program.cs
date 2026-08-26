@@ -9,6 +9,8 @@ using ClearlySaid.Web.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using ClearlySaid.Web.Services.Messaging;
+using Wright.Messaging.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,6 +39,28 @@ builder.Services.AddSingleton<ClearlySaidDatabase>();
 builder.Services.AddSingleton<StripeBillingService>();
 builder.Services.AddSingleton<GooglePlayBillingService>();
 builder.Services.AddSingleton<TransactionalEmailService>();
+var messagingBaseUrl = builder.Configuration["Messaging:BaseUrl"];
+var messagingApplicationId = builder.Configuration["Messaging:ApplicationId"];
+var messagingApplicationKey = builder.Configuration["Messaging:ApplicationKey"];
+if (Uri.TryCreate(messagingBaseUrl, UriKind.Absolute, out var messagingUri) &&
+    !string.IsNullOrWhiteSpace(messagingApplicationId) &&
+    !string.IsNullOrWhiteSpace(messagingApplicationKey))
+{
+    builder.Services.AddWrightMessagingClient(options =>
+    {
+        options.BaseAddress = messagingUri;
+        options.ApplicationId = messagingApplicationId;
+        options.ApplicationKey = messagingApplicationKey;
+    });
+    builder.Services.AddTransient<ISmsMessageSender, WrightSmsMessageSender>();
+    builder.Services.AddTransient<ISmsConsentSynchronizer, WrightSmsConsentSynchronizer>();
+}
+else
+{
+    builder.Services.AddSingleton<UnconfiguredSmsMessaging>();
+    builder.Services.AddSingleton<ISmsMessageSender>(services => services.GetRequiredService<UnconfiguredSmsMessaging>());
+    builder.Services.AddSingleton<ISmsConsentSynchronizer>(services => services.GetRequiredService<UnconfiguredSmsMessaging>());
+}
 builder.Services.AddScoped<IAccessTokenStore, BrowserAccessTokenStore>();
 builder.Services.AddScoped<ClearlySaidApiClient>(services => new ClearlySaidApiClient(
     services.GetRequiredService<IHttpClientFactory>().CreateClient("Public"),

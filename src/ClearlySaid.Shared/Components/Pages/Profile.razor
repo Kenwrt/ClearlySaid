@@ -22,7 +22,7 @@
     {
         <section class="cs-profile-card" aria-labelledby="mobile-heading">
             <h2 id="mobile-heading">Mobile number and text messages</h2>
-            <p>Adding a mobile number is optional. ClearlySaid does not send text messages yet. Your number will require verification before future messages can be enabled.</p>
+            <p>Adding a mobile number is optional. Verify it to receive requested account and service updates from ClearlySaid.</p>
 
             <label for="profile-phone">US or Canadian mobile number</label>
             <input id="profile-phone" type="tel" autocomplete="tel" inputmode="tel"
@@ -47,7 +47,20 @@
                 </label>
             }
 
-            <p class="cs-profile-fine-print">Review the <a href="/privacy">Privacy Policy</a>. ClearlySaid will record the date, consent wording version, source, and consent status. Saving a phone number without selecting the consent checkbox does not authorize text messages.</p>
+            <p class="cs-profile-fine-print">Review the <a href="/sms-terms">SMS Terms</a> and <a href="/privacy">Privacy Policy</a>. ClearlySaid records the date, consent wording version, source, and consent status. Saving a phone number without selecting the consent checkbox does not authorize text messages.</p>
+
+            @if (AccountService.CurrentAccount?.SmsConsentStatus == SmsConsentStatuses.PendingVerification)
+            {
+                <div class="cs-profile-verification">
+                    <label for="verification-code">Verification code</label>
+                    <input id="verification-code" type="text" inputmode="numeric" autocomplete="one-time-code"
+                           maxlength="6" placeholder="Six-digit code" @bind="verificationCode" />
+                    <div class="cs-profile-actions">
+                        <button class="cs-button cs-button-primary" type="button" disabled="@busy" @onclick="VerifyAsync">Verify number</button>
+                        <button class="cs-button cs-button-secondary" type="button" disabled="@busy" @onclick="ResendAsync">Send another code</button>
+                    </div>
+                </div>
+            }
 
             @if (!string.IsNullOrWhiteSpace(notice))
             {
@@ -71,6 +84,7 @@
     private string phoneNumber = string.Empty;
     private bool grantConsent;
     private bool withdrawConsent;
+    private string verificationCode = string.Empty;
     private bool busy;
     private string notice = string.Empty;
     private string error = string.Empty;
@@ -106,7 +120,9 @@
             phoneNumber = AccountService.CurrentAccount?.PhoneNumber ?? string.Empty;
             grantConsent = false;
             withdrawConsent = false;
-            notice = "Your profile has been updated. No text message was sent.";
+            notice = AccountService.CurrentAccount?.SmsConsentStatus == SmsConsentStatuses.PendingVerification
+                ? "Your profile was saved and a verification code was sent by text."
+                : "Your profile has been updated.";
         }
         catch (AccountApiException exception)
         {
@@ -116,5 +132,29 @@
         {
             busy = false;
         }
+    }
+
+    private async Task VerifyAsync()
+    {
+        busy = true; notice = string.Empty; error = string.Empty;
+        try
+        {
+            await AccountService.VerifyPhoneAsync(verificationCode);
+            Navigation.NavigateTo("/");
+        }
+        catch (AccountApiException exception) { error = exception.Message; }
+        finally { busy = false; }
+    }
+
+    private async Task ResendAsync()
+    {
+        busy = true; notice = string.Empty; error = string.Empty;
+        try
+        {
+            await AccountService.ResendPhoneVerificationAsync();
+            notice = "A new verification code was sent by text.";
+        }
+        catch (AccountApiException exception) { error = exception.Message; }
+        finally { busy = false; }
     }
 }

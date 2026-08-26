@@ -4,10 +4,18 @@ namespace ClearlySaid.Web.Services.Messaging;
 // Callers must verify consent and phone verification before invoking a sender.
 public interface ISmsMessageSender
 {
+    bool IsConfigured { get; }
     Task<SmsSendResult> SendAsync(SmsMessage message, CancellationToken cancellationToken = default);
 }
 
+public interface ISmsConsentSynchronizer
+{
+    bool IsConfigured { get; }
+    Task SetConsentAsync(Guid userId, string destinationE164, bool optedIn, CancellationToken cancellationToken = default);
+}
+
 public sealed record SmsMessage(
+    Guid UserId,
     string DestinationE164,
     string Body,
     string Category,

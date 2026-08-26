@@ -141,6 +141,31 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
             ?? throw new AccountApiException("The account service returned an empty response."));
     }
 
+    public async Task<AccountInfo> VerifyPhoneAsync(string code, CancellationToken cancellationToken = default)
+    {
+        var token = await tokenStore.GetAsync();
+        if (string.IsNullOrWhiteSpace(token)) throw new AccountApiException("Sign in to verify your phone.");
+        using var request = CreateAuthorizedRequest(HttpMethod.Post, "api/account/profile/phone/verify", token);
+        request.Content = JsonContent.Create(new VerifyPhoneRequest(code));
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        var account = await response.Content.ReadFromJsonAsync<AccountInfo>(cancellationToken)
+            ?? throw new AccountApiException("The account service returned an empty response.");
+        SetAccount(account);
+        return account;
+    }
+
+    public async Task<SendPhoneVerificationResponse> ResendPhoneVerificationAsync(CancellationToken cancellationToken = default)
+    {
+        var token = await tokenStore.GetAsync();
+        if (string.IsNullOrWhiteSpace(token)) throw new AccountApiException("Sign in to verify your phone.");
+        using var request = CreateAuthorizedRequest(HttpMethod.Post, "api/account/profile/phone/verification/send", token);
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<SendPhoneVerificationResponse>(cancellationToken)
+            ?? throw new AccountApiException("The verification service returned an empty response.");
+    }
+
     public async Task DeleteAccountAsync(CancellationToken cancellationToken = default)
     {
         var token = await tokenStore.GetAsync();

@@ -856,13 +856,18 @@ public sealed partial class ClearlySaidDatabase(
                     phone_verified_at = CASE WHEN phone_e164 IS NOT DISTINCT FROM @phone THEN phone_verified_at ELSE NULL END,
                     sms_consent_status = @status,
                     sms_consented_at = CASE WHEN @grantConsent THEN now() WHEN @status = 'NotProvided' THEN NULL ELSE sms_consented_at END,
-                    sms_consent_version = CASE WHEN @grantConsent THEN 'account-service-v1' WHEN @status = 'NotProvided' THEN NULL ELSE sms_consent_version END
+                    sms_consent_version = CASE WHEN @grantConsent THEN 'account-service-v2' WHEN @status = 'NotProvided' THEN NULL ELSE sms_consent_version END,
+                    sms_verification_salt = CASE WHEN @grantConsent THEN NULL WHEN phone_e164 IS DISTINCT FROM @phone OR @withdrawConsent THEN NULL ELSE sms_verification_salt END,
+                    sms_verification_code_hash = CASE WHEN @grantConsent THEN NULL WHEN phone_e164 IS DISTINCT FROM @phone OR @withdrawConsent THEN NULL ELSE sms_verification_code_hash END,
+                    sms_verification_expires_at = CASE WHEN @grantConsent THEN NULL WHEN phone_e164 IS DISTINCT FROM @phone OR @withdrawConsent THEN NULL ELSE sms_verification_expires_at END,
+                    sms_verification_attempts = CASE WHEN @grantConsent OR phone_e164 IS DISTINCT FROM @phone OR @withdrawConsent THEN 0 ELSE sms_verification_attempts END
                 WHERE id = @userId;
                 """;
             update.Parameters.AddWithValue("userId", userId);
             update.Parameters.AddWithValue("phone", (object?)phoneE164 ?? DBNull.Value);
             update.Parameters.AddWithValue("status", status);
             update.Parameters.AddWithValue("grantConsent", grantConsent);
+            update.Parameters.AddWithValue("withdrawConsent", withdrawConsent);
             await update.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -873,7 +878,7 @@ public sealed partial class ClearlySaidDatabase(
             audit.CommandText = """
                 INSERT INTO clearlysaid_sms_consent_events
                     (id, user_id, phone_e164, event_type, consent_scope, disclosure_version, source)
-                VALUES (@id, @userId, @phone, @eventType, 'account_and_service', 'account-service-v1', 'WebProfile');
+                VALUES (@id, @userId, @phone, @eventType, 'account_and_service', 'account-service-v2', 'WebProfile');
                 """;
             audit.Parameters.AddWithValue("id", Guid.NewGuid());
             audit.Parameters.AddWithValue("userId", userId);
@@ -884,6 +889,91 @@ public sealed partial class ClearlySaidDatabase(
 
         await transaction.CommitAsync(cancellationToken);
         return await GetAccountAsync(userId, cancellationToken);
+    }
+
+    public async Task<DateTimeOffset> SavePhoneVerificationAsync(
+        Guid userId, byte[] salt, byte[] codeHash, TimeSpan lifetime, CancellationToken cancellationToken)
+    {
+        var expiresAt = DateTimeOffset.UtcNow.Add(lifetime);
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE clearlysaid_users
+            SET sms_verification_salt = @salt,
+                sms_verification_code_hash = @hash,
+                sms_verification_expires_at = @expiresAt,
+                sms_verification_attempts = 0
+            WHERE id = @userId AND phone_e164 IS NOT NULL AND sms_consent_status = 'PendingVerification';
+            """;
+        command.Parameters.AddWithValue("userId", userId);
+        command.Parameters.AddWithValue("salt", salt);
+        command.Parameters.AddWithValue("hash", codeHash);
+        command.Parameters.AddWithValue("expiresAt", expiresAt);
+        if (await command.ExecuteNonQueryAsync(cancellationToken) != 1)
+            throw new InvalidOperationException("Phone verification is not available for this account.");
+        return expiresAt;
+    }
+
+    public async Task<byte[]?> GetPhoneVerificationSaltAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT sms_verification_salt FROM clearlysaid_users WHERE id = @userId;";
+        command.Parameters.AddWithValue("userId", userId);
+        return await command.ExecuteScalarAsync(cancellationToken) as byte[];
+    }
+
+    public async Task<AccountInfo?> ConfirmPhoneVerificationAsync(
+        Guid userId, byte[] codeHash, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE clearlysaid_users
+            SET phone_verified_at = now(),
+                sms_consent_status = 'OptedIn',
+                sms_verification_salt = NULL,
+                sms_verification_code_hash = NULL,
+                sms_verification_expires_at = NULL,
+                sms_verification_attempts = 0
+            WHERE id = @userId
+              AND sms_consent_status = 'PendingVerification'
+              AND sms_verification_expires_at > now()
+              AND sms_verification_attempts < 5
+              AND sms_verification_code_hash = @hash;
+            """;
+        command.Parameters.AddWithValue("userId", userId);
+        command.Parameters.AddWithValue("hash", codeHash);
+        var verified = await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        if (!verified)
+        {
+            await using var attempt = connection.CreateCommand();
+            attempt.Transaction = transaction;
+            attempt.CommandText = """
+                UPDATE clearlysaid_users
+                SET sms_verification_attempts = sms_verification_attempts + 1
+                WHERE id = @userId AND sms_consent_status = 'PendingVerification';
+                """;
+            attempt.Parameters.AddWithValue("userId", userId);
+            await attempt.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return verified ? await GetAccountAsync(userId, cancellationToken) : null;
+    }
+
+    public async Task InvalidatePhoneVerificationAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE clearlysaid_users SET sms_verification_salt = NULL,
+                sms_verification_code_hash = NULL, sms_verification_expires_at = NULL,
+                sms_verification_attempts = 0 WHERE id = @userId;
+            """;
+        command.Parameters.AddWithValue("userId", userId);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private async Task<(string Token, DateTimeOffset ExpiresAt)> CreateSessionAsync(
@@ -1070,6 +1160,10 @@ public sealed partial class ClearlySaidDatabase(
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_consent_status text NOT NULL DEFAULT 'NotProvided';
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_consented_at timestamptz NULL;
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_consent_version text NULL;
+        ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_verification_salt bytea NULL;
+        ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_verification_code_hash bytea NULL;
+        ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_verification_expires_at timestamptz NULL;
+        ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_verification_attempts integer NOT NULL DEFAULT 0;
         CREATE TABLE IF NOT EXISTS clearlysaid_sms_consent_events (
             id uuid PRIMARY KEY,
             user_id uuid NOT NULL REFERENCES clearlysaid_users(id) ON DELETE CASCADE,
