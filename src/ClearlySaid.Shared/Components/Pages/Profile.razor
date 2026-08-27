@@ -57,14 +57,23 @@
 
             @if (AccountService.CurrentAccount?.SmsConsentStatus == SmsConsentStatuses.PendingVerification)
             {
-                <div class="cs-profile-verification">
-                    <label for="verification-code">Verification code</label>
-                    <input id="verification-code" type="text" inputmode="numeric" autocomplete="one-time-code"
-                           maxlength="6" placeholder="Six-digit code" @bind="verificationCode" />
+                <div class="cs-profile-verification" aria-labelledby="verification-heading">
+                    <div>
+                        <span class="cs-profile-verification-label">One last step</span>
+                        <h3 id="verification-heading">Verify your mobile number</h3>
+                        <p>Enter the six-digit code sent to your phone. The code expires after 10 minutes.</p>
+                    </div>
+                    <label for="verification-code">Six-digit verification code</label>
+                    <input id="verification-code" class="cs-verification-code" type="text" inputmode="numeric"
+                           autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}"
+                           placeholder="000000" aria-describedby="verification-help" @bind="verificationCode" />
                     <div class="cs-profile-actions">
-                        <button class="cs-button cs-button-primary" type="button" disabled="@busy" @onclick="VerifyAsync">Verify number</button>
+                        <button class="cs-button cs-button-primary" type="button" disabled="@busy" @onclick="VerifyAsync">
+                            @(busy ? "Verifying..." : "Verify number")
+                        </button>
                         <button class="cs-button cs-button-secondary" type="button" disabled="@busy" @onclick="ResendAsync">Send another code</button>
                     </div>
+                    <small id="verification-help">If the message does not arrive, confirm the mobile number above before requesting another code.</small>
                 </div>
             }
 
@@ -77,9 +86,12 @@
                 <p class="cs-error" role="alert">@error</p>
             }
 
-            <button class="cs-button cs-button-primary" type="button" disabled="@busy" @onclick="SaveAsync">
-                @(busy ? "Saving..." : SaveButtonText)
-            </button>
+            @if (AccountService.CurrentAccount?.SmsConsentStatus != SmsConsentStatuses.PendingVerification)
+            {
+                <button class="cs-button cs-button-primary" type="button" disabled="@busy" @onclick="SaveAsync">
+                    @(busy ? "Saving..." : SaveButtonText)
+                </button>
+            }
         </section>
 
         <p><a href="/">Return to ClearlySaid</a></p>

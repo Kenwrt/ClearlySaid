@@ -44,6 +44,18 @@ input { box-sizing: border-box; }
 .cs-profile-choice small { color: #596176; font-weight: 400; line-height: 1.45; }
 .cs-sms-disclosure { border-left: 4px solid #5661eb; border-radius: 10px; background: #f2f3ff; padding: 1rem; }
 .cs-sms-disclosure p { margin: .55rem 0 0; }
+.cs-profile-verification { display: grid; gap: .9rem; border: 1px solid #cfd5ff; border-radius: 14px; background: #f7f8ff; padding: 1.15rem; }
+.cs-profile-verification h3 { margin: .2rem 0 .3rem; font-size: 1.25rem; }
+.cs-profile-verification p { margin: 0; color: #4d566d; }
+.cs-profile-verification-label { color: #4b56dc; font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.cs-profile-verification .cs-verification-code { width: 100%; min-height: 54px; box-sizing: border-box; border: 2px solid #aeb6d5; border-radius: 10px; padding: .7rem 1rem; background: #fff; font: 700 1.35rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .3em; }
+.cs-profile-verification .cs-verification-code:focus { border-color: #4b56dc; outline: 3px solid rgba(75, 86, 220, .18); }
+.cs-profile-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.cs-profile-card .cs-button { min-height: 46px; border: 0; border-radius: 10px; padding: .7rem 1.1rem; font: inherit; font-weight: 800; cursor: pointer; }
+.cs-profile-card .cs-button-primary { background: #4b56dc; color: #fff; }
+.cs-profile-card .cs-button-secondary { border: 1px solid #c5cae0; background: #fff; color: #252d4a; }
+.cs-profile-card .cs-button:disabled { cursor: wait; opacity: .65; }
+@media (max-width: 560px) { .cs-profile-actions { display: grid; } .cs-profile-actions .cs-button { width: 100%; } }
 
 .cs-danger-button {
     min-height: 3rem;
