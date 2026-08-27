@@ -35,6 +35,15 @@ input { box-sizing: border-box; }
 .cs-profile-check input { width: 1.1rem; height: 1.1rem; margin-top: .2rem; }
 .cs-profile-status { border-radius: 10px; background: #eef5ff; padding: .8rem; }
 .cs-profile-fine-print { font-size: .9rem; color: #596176; }
+.cs-profile-phone-status { margin: .15rem 0; }
+.cs-profile-consent { display: grid; gap: .9rem; border: 1px solid #d6dbea; border-radius: 14px; padding: 1rem; }
+.cs-profile-consent legend { padding: 0 .35rem; font-weight: 800; }
+.cs-profile-choice { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: .75rem; font-weight: 400 !important; }
+.cs-profile-choice input { width: 1.1rem; height: 1.1rem; margin-top: .2rem; }
+.cs-profile-choice span { display: grid; gap: .15rem; }
+.cs-profile-choice small { color: #596176; font-weight: 400; line-height: 1.45; }
+.cs-sms-disclosure { border-left: 4px solid #5661eb; border-radius: 10px; background: #f2f3ff; padding: 1rem; }
+.cs-sms-disclosure p { margin: .55rem 0 0; }
 
 .cs-danger-button {
     min-height: 3rem;

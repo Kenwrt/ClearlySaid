@@ -206,9 +206,10 @@ public static class AccountEndpoints
             return Results.Unauthorized();
         }
 
-        if (profile.GrantSmsConsent && profile.WithdrawSmsConsent)
+        var hasConsent = profile.TransactionalConsent || profile.MarketingConsent;
+        if (hasConsent && !profile.ConfirmsAuthority)
         {
-            return Results.Problem("Choose either consent or opt out, not both.", statusCode: 400);
+            return Results.Problem("Confirm that you are authorized to consent for this mobile number.", statusCode: 400);
         }
 
         var normalizedPhone = NormalizeNorthAmericanPhone(profile.PhoneNumber);
@@ -219,28 +220,29 @@ public static class AccountEndpoints
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        if (profile.GrantSmsConsent && normalizedPhone is null)
+        if (hasConsent && normalizedPhone is null)
         {
             return Results.Problem("Enter a mobile number before providing text-message consent.", statusCode: 400);
         }
 
         var existing = await database.GetAccountAsync(user.Id, cancellationToken);
         var updated = await database.UpdatePhoneProfileAsync(
-            user.Id, normalizedPhone, profile.GrantSmsConsent, profile.WithdrawSmsConsent, cancellationToken);
+            user.Id, normalizedPhone, profile.TransactionalConsent, profile.MarketingConsent,
+            "clearlysaid-messaging-v1", cancellationToken);
 
         if (existing.PhoneNumber is not null &&
-            (!string.Equals(existing.PhoneNumber, normalizedPhone, StringComparison.Ordinal) || profile.WithdrawSmsConsent))
+            (!string.Equals(existing.PhoneNumber, normalizedPhone, StringComparison.Ordinal) || !hasConsent))
         {
             await consentSynchronizer.SetConsentAsync(user.Id, existing.PhoneNumber, false, cancellationToken);
         }
         if (normalizedPhone is not null)
         {
             await consentSynchronizer.SetConsentAsync(
-                user.Id, normalizedPhone, profile.GrantSmsConsent || updated.SmsConsentStatus == SmsConsentStatuses.OptedIn,
+                user.Id, normalizedPhone, hasConsent,
                 cancellationToken);
         }
 
-        if (profile.GrantSmsConsent && normalizedPhone is not null)
+        if (hasConsent && normalizedPhone is not null && !updated.PhoneVerified)
         {
             if (!smsSender.IsConfigured && environment.IsProduction())
                 return Results.Problem("Text messaging is not configured.", statusCode: StatusCodes.Status503ServiceUnavailable);

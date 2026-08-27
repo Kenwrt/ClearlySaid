@@ -808,6 +808,8 @@ public sealed partial class ClearlySaidDatabase(
                 phone_verified_at = NULL,
                 sms_consent_status = 'NotProvided',
                 sms_consented_at = NULL,
+                sms_transactional_consented_at = NULL,
+                sms_marketing_consented_at = NULL,
                 disabled_at = now()
             WHERE id = @userId;
             UPDATE clearlysaid_sms_consent_events SET phone_e164 = NULL WHERE user_id = @userId;
@@ -820,29 +822,35 @@ public sealed partial class ClearlySaidDatabase(
     public async Task<AccountInfo> UpdatePhoneProfileAsync(
         Guid userId,
         string? phoneE164,
-        bool grantConsent,
-        bool withdrawConsent,
+        bool transactionalConsent,
+        bool marketingConsent,
+        string consentVersion,
         CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         string? existingPhone;
         string existingStatus;
+        bool existingPhoneVerified;
         await using (var read = connection.CreateCommand())
         {
             read.Transaction = transaction;
-            read.CommandText = "SELECT phone_e164, sms_consent_status FROM clearlysaid_users WHERE id = @userId FOR UPDATE;";
+            read.CommandText = "SELECT phone_e164, sms_consent_status, phone_verified_at IS NOT NULL FROM clearlysaid_users WHERE id = @userId FOR UPDATE;";
             read.Parameters.AddWithValue("userId", userId);
             await using var reader = await read.ExecuteReaderAsync(cancellationToken);
             if (!await reader.ReadAsync(cancellationToken)) throw new InvalidOperationException("The account could not be found.");
             existingPhone = reader.IsDBNull(0) ? null : reader.GetString(0);
             existingStatus = reader.GetString(1);
+            existingPhoneVerified = reader.GetBoolean(2);
         }
 
         var phoneChanged = !string.Equals(existingPhone, phoneE164, StringComparison.Ordinal);
-        var status = grantConsent
-            ? SmsConsentStatuses.PendingVerification
-            : withdrawConsent || phoneChanged && existingStatus is SmsConsentStatuses.OptedIn or SmsConsentStatuses.PendingVerification
+        var hasConsent = transactionalConsent || marketingConsent;
+        var status = hasConsent
+            ? phoneChanged || !existingPhoneVerified
+                ? SmsConsentStatuses.PendingVerification
+                : SmsConsentStatuses.OptedIn
+            : existingStatus is SmsConsentStatuses.OptedIn or SmsConsentStatuses.PendingVerification
                 ? SmsConsentStatuses.OptedOut
                 : existingStatus;
         if (phoneE164 is null) status = SmsConsentStatuses.NotProvided;
@@ -855,35 +863,41 @@ public sealed partial class ClearlySaidDatabase(
                 SET phone_e164 = @phone,
                     phone_verified_at = CASE WHEN phone_e164 IS NOT DISTINCT FROM @phone THEN phone_verified_at ELSE NULL END,
                     sms_consent_status = @status,
-                    sms_consented_at = CASE WHEN @grantConsent THEN now() WHEN @status = 'NotProvided' THEN NULL ELSE sms_consented_at END,
-                    sms_consent_version = CASE WHEN @grantConsent THEN 'account-service-v2' WHEN @status = 'NotProvided' THEN NULL ELSE sms_consent_version END,
-                    sms_verification_salt = CASE WHEN @grantConsent THEN NULL WHEN phone_e164 IS DISTINCT FROM @phone OR @withdrawConsent THEN NULL ELSE sms_verification_salt END,
-                    sms_verification_code_hash = CASE WHEN @grantConsent THEN NULL WHEN phone_e164 IS DISTINCT FROM @phone OR @withdrawConsent THEN NULL ELSE sms_verification_code_hash END,
-                    sms_verification_expires_at = CASE WHEN @grantConsent THEN NULL WHEN phone_e164 IS DISTINCT FROM @phone OR @withdrawConsent THEN NULL ELSE sms_verification_expires_at END,
-                    sms_verification_attempts = CASE WHEN @grantConsent OR phone_e164 IS DISTINCT FROM @phone OR @withdrawConsent THEN 0 ELSE sms_verification_attempts END
+                    sms_consented_at = CASE WHEN @hasConsent THEN now() WHEN @status = 'NotProvided' THEN NULL ELSE sms_consented_at END,
+                    sms_consent_version = CASE WHEN @hasConsent THEN @consentVersion WHEN @status = 'NotProvided' THEN NULL ELSE sms_consent_version END,
+                    sms_transactional_consented_at = CASE WHEN @transactionalConsent THEN COALESCE(sms_transactional_consented_at, now()) ELSE NULL END,
+                    sms_marketing_consented_at = CASE WHEN @marketingConsent THEN COALESCE(sms_marketing_consented_at, now()) ELSE NULL END,
+                    sms_verification_salt = CASE WHEN phone_e164 IS DISTINCT FROM @phone OR NOT @hasConsent THEN NULL ELSE sms_verification_salt END,
+                    sms_verification_code_hash = CASE WHEN phone_e164 IS DISTINCT FROM @phone OR NOT @hasConsent THEN NULL ELSE sms_verification_code_hash END,
+                    sms_verification_expires_at = CASE WHEN phone_e164 IS DISTINCT FROM @phone OR NOT @hasConsent THEN NULL ELSE sms_verification_expires_at END,
+                    sms_verification_attempts = CASE WHEN phone_e164 IS DISTINCT FROM @phone OR NOT @hasConsent THEN 0 ELSE sms_verification_attempts END
                 WHERE id = @userId;
                 """;
             update.Parameters.AddWithValue("userId", userId);
             update.Parameters.AddWithValue("phone", (object?)phoneE164 ?? DBNull.Value);
             update.Parameters.AddWithValue("status", status);
-            update.Parameters.AddWithValue("grantConsent", grantConsent);
-            update.Parameters.AddWithValue("withdrawConsent", withdrawConsent);
+            update.Parameters.AddWithValue("hasConsent", hasConsent);
+            update.Parameters.AddWithValue("transactionalConsent", transactionalConsent);
+            update.Parameters.AddWithValue("marketingConsent", marketingConsent);
+            update.Parameters.AddWithValue("consentVersion", consentVersion);
             await update.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        if (phoneChanged || grantConsent || withdrawConsent)
+        if (phoneChanged || hasConsent || existingStatus is SmsConsentStatuses.OptedIn or SmsConsentStatuses.PendingVerification)
         {
             await using var audit = connection.CreateCommand();
             audit.Transaction = transaction;
             audit.CommandText = """
                 INSERT INTO clearlysaid_sms_consent_events
                     (id, user_id, phone_e164, event_type, consent_scope, disclosure_version, source)
-                VALUES (@id, @userId, @phone, @eventType, 'account_and_service', 'account-service-v2', 'WebProfile');
+                VALUES (@id, @userId, @phone, @eventType, @scope, @consentVersion, 'WebProfile');
                 """;
             audit.Parameters.AddWithValue("id", Guid.NewGuid());
             audit.Parameters.AddWithValue("userId", userId);
             audit.Parameters.AddWithValue("phone", (object?)phoneE164 ?? DBNull.Value);
-            audit.Parameters.AddWithValue("eventType", grantConsent ? "ConsentGranted" : withdrawConsent ? "ConsentWithdrawn" : "PhoneChanged");
+            audit.Parameters.AddWithValue("eventType", hasConsent ? "ConsentUpdated" : "ConsentWithdrawn");
+            audit.Parameters.AddWithValue("scope", transactionalConsent && marketingConsent ? "transactional_and_marketing" : transactionalConsent ? "transactional" : marketingConsent ? "marketing" : "none");
+            audit.Parameters.AddWithValue("consentVersion", consentVersion);
             await audit.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -1108,7 +1122,9 @@ public sealed partial class ClearlySaidDatabase(
         reader.GetInt32(4), reader.GetFieldValue<DateTimeOffset>(5), reader.GetString(6),
         reader.IsDBNull(7) ? null : reader.GetString(7), reader.GetBoolean(8),
         reader.IsDBNull(9) ? null : reader.GetString(9), !reader.IsDBNull(10), reader.GetString(11),
-        reader.IsDBNull(12) ? null : reader.GetFieldValue<DateTimeOffset>(12));
+        reader.IsDBNull(12) ? null : reader.GetFieldValue<DateTimeOffset>(12),
+        reader.IsDBNull(13) ? null : reader.GetFieldValue<DateTimeOffset>(13),
+        reader.IsDBNull(14) ? null : reader.GetFieldValue<DateTimeOffset>(14));
 
     private static string NormalizeEmail(string email) => email.Trim().ToUpperInvariant();
 
@@ -1131,7 +1147,8 @@ public sealed partial class ClearlySaidDatabase(
         SELECT u.id, u.email, q.plan_id, q.monthly_allowance,
                count(e.id) FILTER (WHERE e.status IN ('reserved', 'completed'))::int AS used,
                q.period_ends_at, u.role, q.provider, u.security_notice_dismissed,
-               u.phone_e164, u.phone_verified_at, u.sms_consent_status, u.sms_consented_at
+               u.phone_e164, u.phone_verified_at, u.sms_consent_status, u.sms_consented_at,
+               u.sms_transactional_consented_at, u.sms_marketing_consented_at
         FROM clearlysaid_users u
         JOIN clearlysaid_entitlements q ON q.user_id = u.id
         LEFT JOIN clearlysaid_usage_events e ON e.user_id = u.id
@@ -1139,7 +1156,8 @@ public sealed partial class ClearlySaidDatabase(
         WHERE u.id = @userId
         GROUP BY u.id, u.email, q.plan_id, q.monthly_allowance, q.period_ends_at, u.role,
                  q.provider, u.security_notice_dismissed, u.phone_e164, u.phone_verified_at,
-                 u.sms_consent_status, u.sms_consented_at;
+                 u.sms_consent_status, u.sms_consented_at, u.sms_transactional_consented_at,
+                 u.sms_marketing_consented_at;
         """;
 
     private const string SchemaSql = """
@@ -1159,6 +1177,13 @@ public sealed partial class ClearlySaidDatabase(
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS phone_verified_at timestamptz NULL;
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_consent_status text NOT NULL DEFAULT 'NotProvided';
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_consented_at timestamptz NULL;
+        ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_transactional_consented_at timestamptz NULL;
+        ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_marketing_consented_at timestamptz NULL;
+        UPDATE clearlysaid_users
+        SET sms_transactional_consented_at = sms_consented_at
+        WHERE sms_transactional_consented_at IS NULL
+          AND sms_consented_at IS NOT NULL
+          AND sms_consent_status IN ('PendingVerification', 'OptedIn');
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_consent_version text NULL;
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_verification_salt bytea NULL;
         ALTER TABLE clearlysaid_users ADD COLUMN IF NOT EXISTS sms_verification_code_hash bytea NULL;

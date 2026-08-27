@@ -8,8 +8,9 @@ public sealed record SecurityNoticeAcknowledgementRequest(bool DoNotDisplayAgain
 
 public sealed record UpdatePhoneProfileRequest(
     string? PhoneNumber,
-    bool GrantSmsConsent,
-    bool WithdrawSmsConsent);
+    bool TransactionalConsent,
+    bool MarketingConsent,
+    bool ConfirmsAuthority);
 
 public sealed record VerifyPhoneRequest(string Code);
 
@@ -40,7 +41,9 @@ public sealed record AccountInfo(
     string? PhoneNumber = null,
     bool PhoneVerified = false,
     string SmsConsentStatus = SmsConsentStatuses.NotProvided,
-    DateTimeOffset? SmsConsentedAt = null)
+    DateTimeOffset? SmsConsentedAt = null,
+    DateTimeOffset? SmsTransactionalConsentAt = null,
+    DateTimeOffset? SmsMarketingConsentAt = null)
 {
     public bool IsUnlimited => Role == AccountRoles.Admin;
     public int Remaining => Math.Max(0, MonthlyAllowance - UsedThisPeriod);

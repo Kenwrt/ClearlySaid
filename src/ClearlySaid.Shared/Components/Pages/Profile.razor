@@ -21,33 +21,39 @@
     else
     {
         <section class="cs-profile-card" aria-labelledby="mobile-heading">
-            <h2 id="mobile-heading">Mobile number and text messages</h2>
-            <p>Adding a mobile number is optional. Verify it to receive requested account and service updates from ClearlySaid.</p>
+            <h2 id="mobile-heading">Mobile number</h2>
+            <p>Your number must be verified before ClearlySaid sends requested account or service updates.</p>
 
-            <label for="profile-phone">US or Canadian mobile number</label>
+            <label for="profile-phone">Mobile phone number</label>
             <input id="profile-phone" type="tel" autocomplete="tel" inputmode="tel"
                    placeholder="(555) 555-0123" @bind="phoneNumber" />
-            <small>We store the number in international format. Standard message and data rates may apply when messaging is enabled.</small>
-
-            @if (HasActiveOrPendingConsent)
+            <small>Use a number you own or are authorized to use. US and Canadian numbers may be entered with or without the country code.</small>
+            @if (!string.IsNullOrWhiteSpace(phoneNumber))
             {
-                <div class="cs-profile-status" role="status">
-                    <strong>Consent status:</strong> @ConsentStatusText
-                </div>
-                <label class="cs-profile-check">
-                    <input type="checkbox" @bind="withdrawConsent" />
-                    Stop future text messages and withdraw my consent.
-                </label>
-            }
-            else
-            {
-                <label class="cs-profile-check">
-                    <input type="checkbox" @bind="grantConsent" />
-                    I agree to receive account and service text messages from ClearlySaid at the mobile number provided. Message frequency varies. Message and data rates may apply. Consent is not a condition of purchase. Reply STOP to opt out and HELP for help. This does not include marketing messages.
-                </label>
+                <p class="cs-profile-phone-status">Phone status: <strong>@(DisplayedPhoneIsVerified ? "Verified" : "Unverified")</strong></p>
             }
 
-            <p class="cs-profile-fine-print">Review the <a href="/sms-terms">SMS Terms</a> and <a href="/privacy">Privacy Policy</a>. ClearlySaid records the date, consent wording version, source, and consent status. Saving a phone number without selecting the consent checkbox does not authorize text messages.</p>
+            <fieldset class="cs-profile-consent">
+                <legend>Text-message permissions</legend>
+                <label class="cs-profile-choice">
+                    <input type="checkbox" @bind="transactionalConsent" />
+                    <span><strong>Account and service updates</strong><small>I agree to receive automated transactional texts from ClearlySaid about my account and requested service activity.</small></span>
+                </label>
+                <label class="cs-profile-choice">
+                    <input type="checkbox" @bind="marketingConsent" />
+                    <span><strong>Offers and product news (optional)</strong><small>I separately agree to receive recurring automated marketing texts from ClearlySaid. This is not required to verify my number or use ClearlySaid.</small></span>
+                </label>
+                <label class="cs-profile-choice">
+                    <input type="checkbox" @bind="confirmsAuthority" />
+                    <span><strong>Required:</strong><small>I confirm that I am at least 18 years old and am the subscriber or customary user authorized to provide consent for this mobile number.</small></span>
+                </label>
+            </fieldset>
+
+            <div class="cs-sms-disclosure">
+                <strong>Important text messaging disclosure</strong>
+                <p>By selecting a category and saving, you agree to receive automated texts from ClearlySaid for that category at the number provided. Consent is not a condition of purchase. Message frequency varies. Message and data rates may apply. Reply STOP to opt out and HELP for help.</p>
+                <p>Review the <a href="/sms-terms">Text Messaging Terms</a> and <a href="/privacy">Privacy Policy</a>.</p>
+            </div>
 
             @if (AccountService.CurrentAccount?.SmsConsentStatus == SmsConsentStatuses.PendingVerification)
             {
@@ -72,7 +78,7 @@
             }
 
             <button class="cs-button cs-button-primary" type="button" disabled="@busy" @onclick="SaveAsync">
-                @(busy ? "Saving..." : "Save profile")
+                @(busy ? "Saving..." : SaveButtonText)
             </button>
         </section>
 
@@ -82,29 +88,26 @@
 
 @code {
     private string phoneNumber = string.Empty;
-    private bool grantConsent;
-    private bool withdrawConsent;
+    private bool transactionalConsent;
+    private bool marketingConsent;
+    private bool confirmsAuthority;
     private string verificationCode = string.Empty;
     private bool busy;
     private string notice = string.Empty;
     private string error = string.Empty;
 
-    private bool HasActiveOrPendingConsent => AccountService.CurrentAccount?.SmsConsentStatus is
-        SmsConsentStatuses.OptedIn or SmsConsentStatuses.PendingVerification;
-
-    private string ConsentStatusText => AccountService.CurrentAccount?.SmsConsentStatus switch
-    {
-        SmsConsentStatuses.PendingVerification => "Consent recorded, phone verification pending",
-        SmsConsentStatuses.OptedIn => "Opted in",
-        SmsConsentStatuses.OptedOut => "Opted out",
-        _ => "Not provided"
-    };
+    private bool HasMessageConsent => transactionalConsent || marketingConsent;
+    private bool DisplayedPhoneIsVerified => AccountService.CurrentAccount?.PhoneVerified == true &&
+        string.Equals(NormalizeForComparison(phoneNumber), AccountService.CurrentAccount.PhoneNumber, StringComparison.Ordinal);
+    private string SaveButtonText => !DisplayedPhoneIsVerified && !string.IsNullOrWhiteSpace(phoneNumber) && HasMessageConsent
+        ? "Save and verify"
+        : "Update profile";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
         await AccountService.InitializeAsync();
-        phoneNumber = AccountService.CurrentAccount?.PhoneNumber ?? string.Empty;
+        LoadAccount();
         StateHasChanged();
     }
 
@@ -116,13 +119,14 @@
         try
         {
             await AccountService.UpdatePhoneProfileAsync(
-                new UpdatePhoneProfileRequest(phoneNumber, grantConsent, withdrawConsent));
-            phoneNumber = AccountService.CurrentAccount?.PhoneNumber ?? string.Empty;
-            grantConsent = false;
-            withdrawConsent = false;
+                new UpdatePhoneProfileRequest(phoneNumber, transactionalConsent, marketingConsent,
+                    confirmsAuthority));
+            LoadAccount();
             notice = AccountService.CurrentAccount?.SmsConsentStatus == SmsConsentStatuses.PendingVerification
                 ? "Your profile was saved and a verification code was sent by text."
                 : "Your profile has been updated.";
+            if (AccountService.CurrentAccount?.SmsConsentStatus != SmsConsentStatuses.PendingVerification)
+                Navigation.NavigateTo("/");
         }
         catch (AccountApiException exception)
         {
@@ -132,6 +136,24 @@
         {
             busy = false;
         }
+    }
+
+    private void LoadAccount()
+    {
+        var account = AccountService.CurrentAccount;
+        if (account is null) return;
+        phoneNumber = account.PhoneNumber ?? string.Empty;
+        transactionalConsent = account.SmsTransactionalConsentAt is not null;
+        marketingConsent = account.SmsMarketingConsentAt is not null;
+        confirmsAuthority = transactionalConsent || marketingConsent;
+    }
+
+    private static string? NormalizeForComparison(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var digits = new string(value.Where(char.IsDigit).ToArray());
+        if (digits.Length == 10) digits = "1" + digits;
+        return digits.Length is >= 8 and <= 15 ? "+" + digits : value.Trim();
     }
 
     private async Task VerifyAsync()
