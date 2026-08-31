@@ -56,10 +56,35 @@ try {
     if ($account.email -ne $testEmail) {
         throw "Local staging returned the wrong test account."
     }
+
+    $headers = @{ Authorization = "Bearer $($login.accessToken)" }
+    $profile = Invoke-RestMethod -Method Put -Uri "$baseUrl/api/account/profile/phone" `
+        -Headers $headers -ContentType "application/json" `
+        -Body (@{ phoneNumber = "(312) 555-0142"; transactionalConsent = $false; marketingConsent = $false; confirmsAuthority = $false } | ConvertTo-Json)
+    if ($profile.phoneNumber -ne "+13125550142" -or $profile.smsConsentStatus -ne "NotProvided") {
+        throw "Saving a phone number incorrectly granted text-message consent."
+    }
+
+    $profile = Invoke-RestMethod -Method Put -Uri "$baseUrl/api/account/profile/phone" `
+        -Headers $headers -ContentType "application/json" `
+        -Body (@{ phoneNumber = "3125550142"; transactionalConsent = $true; marketingConsent = $false; confirmsAuthority = $true } | ConvertTo-Json)
+    if ($profile.smsConsentStatus -ne "PendingVerification" -or $profile.phoneVerified) {
+        throw "Text-message consent was not recorded as pending phone verification."
+    }
+    if (-not $profile.smsTransactionalConsentAt -or $profile.smsMarketingConsentAt) {
+        throw "Purpose-specific text-message consent was not persisted correctly."
+    }
+
+    $profile = Invoke-RestMethod -Method Put -Uri "$baseUrl/api/account/profile/phone" `
+        -Headers $headers -ContentType "application/json" `
+        -Body (@{ phoneNumber = "3125550199"; transactionalConsent = $false; marketingConsent = $false; confirmsAuthority = $false } | ConvertTo-Json)
+    if ($profile.smsConsentStatus -ne "OptedOut" -or $profile.phoneVerified) {
+        throw "Changing the phone number did not withdraw the prior consent."
+    }
 }
 finally {
     Invoke-RestMethod -Method Delete -Uri "$baseUrl/api/account" `
         -Headers @{ Authorization = "Bearer $($login.accessToken)" } | Out-Null
 }
 
-Write-Host "Local staging passed health, protected-route, registration, and login checks at $baseUrl."
+Write-Host "Local staging passed health, protected-route, registration, login, phone-profile, and consent checks at $baseUrl."

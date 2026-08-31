@@ -1,0 +1,194 @@
+@page "/account/profile"
+@using ClearlySaid.Shared.Models
+@using ClearlySaid.Shared.Services
+@inject IAccountService AccountService
+@inject NavigationManager Navigation
+
+<PageTitle>Profile - ClearlySaid</PageTitle>
+
+<main class="cs-legal cs-profile">
+    <h1>Your profile</h1>
+
+    @if (!AccountService.IsInitialized)
+    {
+        <p>Loading your profile...</p>
+    }
+    else if (AccountService.CurrentAccount is null)
+    {
+        <p>Sign in before updating your profile.</p>
+        <p><a href="/">Return to sign in</a></p>
+    }
+    else
+    {
+        <section class="cs-profile-card" aria-labelledby="mobile-heading">
+            <h2 id="mobile-heading">Mobile number</h2>
+            <p>Your number must be verified before ClearlySaid sends requested account or service updates.</p>
+
+            <label for="profile-phone">Mobile phone number</label>
+            <input id="profile-phone" type="tel" autocomplete="tel" inputmode="tel"
+                   placeholder="(555) 555-0123" @bind="phoneNumber" />
+            <small>Use a number you own or are authorized to use. US and Canadian numbers may be entered with or without the country code.</small>
+            @if (!string.IsNullOrWhiteSpace(phoneNumber))
+            {
+                <p class="cs-profile-phone-status">Phone status: <strong>@(DisplayedPhoneIsVerified ? "Verified" : "Unverified")</strong></p>
+            }
+
+            <fieldset class="cs-profile-consent">
+                <legend>Text-message permissions</legend>
+                <label class="cs-profile-choice">
+                    <input type="checkbox" @bind="transactionalConsent" />
+                    <span><strong>Account and service updates</strong><small>I agree to receive automated transactional texts from ClearlySaid about my account and requested service activity.</small></span>
+                </label>
+                <label class="cs-profile-choice">
+                    <input type="checkbox" @bind="marketingConsent" />
+                    <span><strong>Offers and product news (optional)</strong><small>I separately agree to receive recurring automated marketing texts from ClearlySaid. This is not required to verify my number or use ClearlySaid.</small></span>
+                </label>
+                <label class="cs-profile-choice">
+                    <input type="checkbox" @bind="confirmsAuthority" />
+                    <span><strong>Required:</strong><small>I confirm that I am at least 18 years old and am the subscriber or customary user authorized to provide consent for this mobile number.</small></span>
+                </label>
+            </fieldset>
+
+            <div class="cs-sms-disclosure">
+                <strong>Important text messaging disclosure</strong>
+                <p>By selecting a category and saving, you agree to receive automated texts from ClearlySaid for that category at the number provided. Consent is not a condition of purchase. Message frequency varies. Message and data rates may apply. Reply STOP to opt out and HELP for help.</p>
+                <p>Review the <a href="/sms-terms">Text Messaging Terms</a> and <a href="/privacy">Privacy Policy</a>.</p>
+            </div>
+
+            @if (AccountService.CurrentAccount?.SmsConsentStatus == SmsConsentStatuses.PendingVerification)
+            {
+                <div class="cs-profile-verification" aria-labelledby="verification-heading">
+                    <div>
+                        <span class="cs-profile-verification-label">One last step</span>
+                        <h3 id="verification-heading">Verify your mobile number</h3>
+                        <p>Enter the six-digit code sent to your phone. The code expires after 10 minutes.</p>
+                    </div>
+                    <label for="verification-code">Six-digit verification code</label>
+                    <input id="verification-code" class="cs-verification-code" type="text" inputmode="numeric"
+                           autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}"
+                           placeholder="000000" aria-describedby="verification-help" @bind="verificationCode" />
+                    <div class="cs-profile-actions">
+                        <button class="cs-button cs-button-primary" type="button" disabled="@busy" @onclick="VerifyAsync">
+                            @(busy ? "Verifying..." : "Verify number")
+                        </button>
+                        <button class="cs-button cs-button-secondary" type="button" disabled="@busy" @onclick="ResendAsync">Send another code</button>
+                    </div>
+                    <small id="verification-help">If the message does not arrive, confirm the mobile number above before requesting another code.</small>
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(notice))
+            {
+                <p class="cs-billing-notice" role="status">@notice</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(error))
+            {
+                <p class="cs-error" role="alert">@error</p>
+            }
+
+            @if (AccountService.CurrentAccount?.SmsConsentStatus != SmsConsentStatuses.PendingVerification)
+            {
+                <button class="cs-button cs-button-primary" type="button" disabled="@busy" @onclick="SaveAsync">
+                    @(busy ? "Saving..." : SaveButtonText)
+                </button>
+            }
+        </section>
+
+        <p><a href="/">Return to ClearlySaid</a></p>
+    }
+</main>
+
+@code {
+    private string phoneNumber = string.Empty;
+    private bool transactionalConsent;
+    private bool marketingConsent;
+    private bool confirmsAuthority;
+    private string verificationCode = string.Empty;
+    private bool busy;
+    private string notice = string.Empty;
+    private string error = string.Empty;
+
+    private bool HasMessageConsent => transactionalConsent || marketingConsent;
+    private bool DisplayedPhoneIsVerified => AccountService.CurrentAccount?.PhoneVerified == true &&
+        string.Equals(NormalizeForComparison(phoneNumber), AccountService.CurrentAccount.PhoneNumber, StringComparison.Ordinal);
+    private string SaveButtonText => !DisplayedPhoneIsVerified && !string.IsNullOrWhiteSpace(phoneNumber) && HasMessageConsent
+        ? "Save and verify"
+        : "Update profile";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await AccountService.InitializeAsync();
+        LoadAccount();
+        StateHasChanged();
+    }
+
+    private async Task SaveAsync()
+    {
+        busy = true;
+        notice = string.Empty;
+        error = string.Empty;
+        try
+        {
+            await AccountService.UpdatePhoneProfileAsync(
+                new UpdatePhoneProfileRequest(phoneNumber, transactionalConsent, marketingConsent,
+                    confirmsAuthority));
+            LoadAccount();
+            notice = AccountService.CurrentAccount?.SmsConsentStatus == SmsConsentStatuses.PendingVerification
+                ? "Your profile was saved and a verification code was sent by text."
+                : "Your profile has been updated.";
+            if (AccountService.CurrentAccount?.SmsConsentStatus != SmsConsentStatuses.PendingVerification)
+                Navigation.NavigateTo("/");
+        }
+        catch (AccountApiException exception)
+        {
+            error = exception.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void LoadAccount()
+    {
+        var account = AccountService.CurrentAccount;
+        if (account is null) return;
+        phoneNumber = account.PhoneNumber ?? string.Empty;
+        transactionalConsent = account.SmsTransactionalConsentAt is not null;
+        marketingConsent = account.SmsMarketingConsentAt is not null;
+        confirmsAuthority = transactionalConsent || marketingConsent;
+    }
+
+    private static string? NormalizeForComparison(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var digits = new string(value.Where(char.IsDigit).ToArray());
+        if (digits.Length == 10) digits = "1" + digits;
+        return digits.Length is >= 8 and <= 15 ? "+" + digits : value.Trim();
+    }
+
+    private async Task VerifyAsync()
+    {
+        busy = true; notice = string.Empty; error = string.Empty;
+        try
+        {
+            await AccountService.VerifyPhoneAsync(verificationCode);
+            Navigation.NavigateTo("/");
+        }
+        catch (AccountApiException exception) { error = exception.Message; }
+        finally { busy = false; }
+    }
+
+    private async Task ResendAsync()
+    {
+        busy = true; notice = string.Empty; error = string.Empty;
+        try
+        {
+            await AccountService.ResendPhoneVerificationAsync();
+            notice = "A new verification code was sent by text.";
+        }
+        catch (AccountApiException exception) { error = exception.Message; }
+        finally { busy = false; }
+    }
+}

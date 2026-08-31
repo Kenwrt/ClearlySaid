@@ -6,6 +6,16 @@ public sealed record LoginRequest(string Email, string Password);
 
 public sealed record SecurityNoticeAcknowledgementRequest(bool DoNotDisplayAgain);
 
+public sealed record UpdatePhoneProfileRequest(
+    string? PhoneNumber,
+    bool TransactionalConsent,
+    bool MarketingConsent,
+    bool ConfirmsAuthority);
+
+public sealed record VerifyPhoneRequest(string Code);
+
+public sealed record SendPhoneVerificationResponse(DateTimeOffset ExpiresAt);
+
 public sealed record EmailRequest(string Email);
 
 public sealed record TokenRequest(string Token);
@@ -27,10 +37,24 @@ public sealed record AccountInfo(
     DateTimeOffset PeriodEndsAt,
     string Role = "User",
     string? SubscriptionProvider = null,
-    bool SecurityNoticeDismissed = false)
+    bool SecurityNoticeDismissed = false,
+    string? PhoneNumber = null,
+    bool PhoneVerified = false,
+    string SmsConsentStatus = SmsConsentStatuses.NotProvided,
+    DateTimeOffset? SmsConsentedAt = null,
+    DateTimeOffset? SmsTransactionalConsentAt = null,
+    DateTimeOffset? SmsMarketingConsentAt = null)
 {
     public bool IsUnlimited => Role == AccountRoles.Admin;
     public int Remaining => Math.Max(0, MonthlyAllowance - UsedThisPeriod);
+}
+
+public static class SmsConsentStatuses
+{
+    public const string NotProvided = "NotProvided";
+    public const string PendingVerification = "PendingVerification";
+    public const string OptedIn = "OptedIn";
+    public const string OptedOut = "OptedOut";
 }
 
 public static class AccountRoles

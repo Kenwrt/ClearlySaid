@@ -37,8 +37,39 @@
 
 <main class="cs-page">
     <header class="cs-brand">
-        <h1>ClearlySaid</h1>
-        <p>Say it naturally. Send it clearly.</p>
+        <div>
+            <h1>ClearlySaid</h1>
+            <p>Say it naturally. Send it clearly.</p>
+        </div>
+        @if (AccountService.CurrentAccount is { } currentAccount)
+        {
+            <details class="cs-account-menu">
+                <summary aria-label="Open account menu for @currentAccount.Email">
+                    <span aria-hidden="true">@AccountInitial</span>
+                </summary>
+                <div class="cs-account-menu-panel">
+                    <strong>@currentAccount.Email</strong>
+                    @if (currentAccount.IsUnlimited)
+                    {
+                        <small>Administrator, unlimited messages</small>
+                    }
+                    else
+                    {
+                        <small>@currentAccount.Remaining of @currentAccount.MonthlyAllowance messages remaining</small>
+                    }
+                    <a href="/account/profile">Profile</a>
+                    @if (currentAccount.Role == AccountRoles.Admin)
+                    {
+                        <a href="/admin">Admin console</a>
+                    }
+                    else
+                    {
+                        <a href="#plans">Plans and billing</a>
+                    }
+                    <button class="cs-link-button" type="button" @onclick="LogoutAsync">Sign out</button>
+                </div>
+            </details>
+        }
     </header>
 
     @if (!AccountService.IsInitialized)
@@ -94,33 +125,6 @@
             {
                 <p class="cs-billing-notice" role="status">@accountNotice</p>
             }
-        </section>
-    }
-    else
-    {
-        <section class="cs-account-summary" aria-label="Account and usage">
-            <div>
-                <strong>@AccountService.CurrentAccount.Email</strong>
-                @if (AccountService.CurrentAccount.IsUnlimited)
-                {
-                    <span>Administrator · Unlimited messages</span>
-                }
-                else
-                {
-                    <span>@(SubscriptionPlans.Find(AccountService.CurrentAccount.Plan)?.DisplayName ?? AccountService.CurrentAccount.Plan) plan · @AccountService.CurrentAccount.Remaining of @AccountService.CurrentAccount.MonthlyAllowance messages remaining</span>
-                    @if (AccountService.CurrentAccount.Plan == SubscriptionPlans.Free)
-                    {
-                        <a class="cs-summary-upgrade" href="#plans">View plans</a>
-                    }
-                }
-            </div>
-            <div class="cs-account-actions">
-                @if (AccountService.CurrentAccount.Role == AccountRoles.Admin)
-                {
-                    <a href="/admin">Admin console</a>
-                }
-                <button class="cs-link-button" type="button" @onclick="LogoutAsync">Sign out</button>
-            </div>
         </section>
     }
 
@@ -202,6 +206,8 @@
         </section>
     }
 
+    @if (string.IsNullOrWhiteSpace(result))
+    {
     <section class="cs-compose" aria-labelledby="your-words-heading" aria-disabled="@(AccountService.CurrentAccount is null || IsOutOfMessages)">
         <div class="cs-compose-heading">
             <h2 id="your-words-heading">Your words</h2>
@@ -224,8 +230,9 @@
 
         @if (HasMessageStyleControls)
         {
-            <fieldset class="cs-style-controls">
-                <legend>Message style <span>Paid feature</span></legend>
+            <details class="cs-style-controls">
+                <summary>Message style <span>Paid feature</span></summary>
+                <div class="cs-style-content">
                 <p>Optionally shape the rewrite without changing your facts.</p>
                 <div class="cs-style-grid">
                     <label>
@@ -256,7 +263,8 @@
                         </select>
                     </label>
                 </div>
-            </fieldset>
+                </div>
+            </details>
         }
 
         <div class="cs-actions">
@@ -278,19 +286,23 @@
                     type="button"
                     disabled="@(isBusy || AccountService.CurrentAccount is null || IsOutOfMessages)"
                     @onclick="RefineAsync">
-                @(isBusy ? "Improving…" : "Make it clear")
+                @(isBusy ? "Improving…" : "Make it Clear")
             </button>
         </div>
     </section>
-
-    @if (!string.IsNullOrWhiteSpace(result))
+    }
+    else
     {
         <section class="cs-result" aria-live="polite" aria-labelledby="clear-version-heading">
-            <h2 id="clear-version-heading">Clear version</h2>
+            <h2 id="clear-version-heading">ClearlySaid response</h2>
             <p>@result</p>
-            <button class="cs-button cs-button-copy" type="button" @onclick="CopyAsync">
-                @(copied ? "Copied" : "Copy message")
-            </button>
+            <div class="cs-result-actions">
+                <button class="cs-button cs-button-copy" type="button" @onclick="CopyAsync">
+                    @(copied ? "Copied" : "Copy message")
+                </button>
+                <button class="cs-button cs-button-result-secondary" type="button" @onclick="EditWords">Edit your words</button>
+                <button class="cs-button cs-button-result-secondary" type="button" @onclick="ClearAsync">New message</button>
+            </div>
         </section>
     }
 
@@ -333,6 +345,8 @@
         !string.IsNullOrWhiteSpace(errorMessage);
     private bool HasMessageStyleControls => AccountService.CurrentAccount is { } account &&
         (account.IsUnlimited || account.Plan != SubscriptionPlans.Free);
+    private string AccountInitial => AccountService.CurrentAccount?.Email
+        .FirstOrDefault(char.IsLetterOrDigit).ToString().ToUpperInvariant() ?? "A";
 
     protected override void OnInitialized()
     {
@@ -655,6 +669,16 @@
         result = string.Empty;
         errorMessage = string.Empty;
         copied = false;
+    }
+
+    private void EditWords()
+    {
+        copyResetCancellation?.Cancel();
+        copyResetCancellation?.Dispose();
+        copyResetCancellation = null;
+        result = string.Empty;
+        copied = false;
+        errorMessage = string.Empty;
     }
 
     private async Task CopyAsync()
