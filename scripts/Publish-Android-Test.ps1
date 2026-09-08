@@ -12,6 +12,10 @@ $checksumPath = "$destinationApk.sha256"
 dotnet build $projectPath `
     --configuration $Configuration `
     --framework net10.0-android `
+    --disable-build-servers `
+    -p:UseSharedCompilation=false `
+    -p:EmbedAssembliesIntoApk=true `
+    -p:AndroidUseSharedRuntime=false `
     -p:AndroidPackageFormats=apk
 
 if ($LASTEXITCODE -ne 0) {
