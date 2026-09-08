@@ -16,7 +16,25 @@ public static class AdminEndpoints
         endpoints.MapDelete("/api/admin/users/{userId:guid}", DeleteUserAsync).RequireRateLimiting("account");
         endpoints.MapGet("/api/admin/activity", GetActivityAsync);
         endpoints.MapGet("/api/admin/diagnostics", GetDiagnosticsAsync);
+        endpoints.MapGet("/api/admin/subscriptions", GetSubscriptionsAsync);
+        endpoints.MapPut("/api/admin/subscriptions", SaveSubscriptionsAsync).RequireRateLimiting("account");
         return endpoints;
+    }
+
+    private static async Task<IResult> GetSubscriptionsAsync(HttpRequest request,
+        ClearlySaidDatabase database, CancellationToken cancellationToken) =>
+        await RequireAdminAsync(request, database, cancellationToken) is null
+            ? Results.StatusCode(403)
+            : Results.Ok(await database.GetSubscriptionManagementAsync(cancellationToken));
+
+    private static async Task<IResult> SaveSubscriptionsAsync(HttpRequest request,
+        SubscriptionManagement settings, ClearlySaidDatabase database, CancellationToken cancellationToken)
+    {
+        var admin = await RequireAdminAsync(request, database, cancellationToken);
+        if (admin is null) return Results.StatusCode(403);
+        try { return Results.Ok(await database.SaveSubscriptionManagementAsync(admin.Id, settings, cancellationToken)); }
+        catch (ArgumentException exception) { return Results.Problem(exception.Message, statusCode: 400); }
+        catch (InvalidOperationException exception) { return Results.Problem(exception.Message, statusCode: 409); }
     }
 
     private static async Task<IResult> GetUsersAsync(

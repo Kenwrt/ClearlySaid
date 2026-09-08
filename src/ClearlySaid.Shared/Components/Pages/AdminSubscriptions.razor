@@ -1,0 +1,112 @@
+@page "/admin/subscriptions"
+@inject IAccountService AccountService
+@inject IAdminService AdminService
+
+<PageTitle>Subscription Fee Management - ClearlySaid</PageTitle>
+<main class="cs-admin-page">
+    <header class="cs-admin-header">
+        <div><h1>Subscription Fee Management</h1><p>Manage ClearlySaid trial access and subscription pricing.</p></div>
+        <a href="/admin">Admin Tools</a>
+    </header>
+    @if (!ready) { <p>Loading...</p> }
+    else if (AccountService.CurrentAccount?.Role != AccountRoles.Admin)
+    {
+        <section class="cs-admin-card"><h2>Access denied</h2><p>Sign in with an administrator account.</p></section>
+    }
+    else
+    {
+        @if (!string.IsNullOrEmpty(error)) { <p role="alert">@error</p> }
+        @if (!string.IsNullOrEmpty(notice)) { <p role="status">@notice</p> }
+        @if (settings is not null)
+        {
+            <section class="cs-admin-card">
+                <h2>Free trial</h2>
+                <p>No automatic charge. Customers choose and purchase a paid plan after the trial.</p>
+                <label>Trial duration (days)<input type="number" min="1" max="365" @bind="settings.FreeTrialDays" disabled="@busy" /></label>
+                <p>Duration changes apply to trials that have not started. Existing trial end dates stay the same. Existing accounts without a trial receive one on their next account access.</p>
+            </section>
+            <section class="cs-admin-card">
+                <h2>Plans and fees</h2>
+                <p>Subscription fees are fixed amounts in USD, billed monthly or annually. They are not calculated from the number of refinements.</p>
+                @if (settings.Plans.Any(p => p.Id != SubscriptionPlans.Free && p.AnnualPrice > p.MonthlyPrice * 12))
+                {
+                    <p role="status">One or more annual fees cost more than twelve monthly payments. Review annual fees before offering these prices.</p>
+                }
+                <div class="fees-scroll">
+                    <table>
+                        <thead><tr><th>Plan</th><th>Name</th><th>Monthly fee</th><th>Annual fee</th><th>Offered</th></tr></thead>
+                        <tbody>
+                        @foreach (var plan in settings.Plans)
+                        {
+                            <tr @key="plan.Id">
+                                <th scope="row">@plan.Id</th>
+                                <td><input aria-label="@(plan.Id + " name")" maxlength="60" @bind="plan.Name" disabled="@busy" /></td>
+                                <td><input aria-label="@(plan.Id + " monthly fee")" type="number" min="0" step="0.01" @bind="plan.MonthlyPrice" disabled="@(busy || plan.Id == SubscriptionPlans.Free)" /></td>
+                                <td><input aria-label="@(plan.Id + " annual fee")" type="number" min="0" step="0.01" @bind="plan.AnnualPrice" disabled="@(busy || plan.Id == SubscriptionPlans.Free)" /></td>
+                                <td><input aria-label="@(plan.Id + " offered")" type="checkbox" @bind="plan.Offered" disabled="@(busy || plan.Id == SubscriptionPlans.Free)" /></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                <p>All plans have no refinement-count limit. Offering a plan controls new purchases. Existing subscriptions continue.</p>
+            </section>
+            <section class="cs-admin-card">
+                <h2>Payment provider prices</h2>
+                <p>Saving fees does not change Stripe or Google Play prices. Create matching recurring prices in Stripe and enter their IDs below. Checkout rejects a Stripe price whose amount, currency, or billing interval does not match. Existing subscribers retain their original Stripe price.</p>
+                <p>Update Android base-plan prices in Google Play Console separately. The Google Play purchase sheet shows the actual local price.</p>
+                @foreach (var plan in settings.Plans.Where(p => p.Id != SubscriptionPlans.Free))
+                {
+                    <fieldset disabled="@busy">
+                        <legend>@plan.Name</legend>
+                        <label>Monthly Stripe price ID<input placeholder="price_..." maxlength="100" @bind="plan.StripeMonthlyPriceId" /></label>
+                        <label>Annual Stripe price ID<input placeholder="price_..." maxlength="100" @bind="plan.StripeAnnualPriceId" /></label>
+                    </fieldset>
+                }
+            </section>
+            <div class="fee-actions">
+                <button type="button" class="cs-button cs-button-primary" disabled="@busy" @onclick="SaveAsync">@(busy ? "Saving..." : "Save subscription settings")</button>
+                <button type="button" class="cs-button cs-button-secondary" disabled="@busy" @onclick="LoadAsync">Reload saved settings</button>
+            </div>
+        }
+        else { <button type="button" class="cs-button cs-button-secondary" @onclick="LoadAsync">Reload settings</button> }
+    }
+</main>
+
+@code {
+    private SubscriptionManagement? settings;
+    private bool ready, busy;
+    private string error = "", notice = "";
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            await AccountService.InitializeAsync();
+            if (AccountService.CurrentAccount?.Role == AccountRoles.Admin) await LoadAsync();
+        }
+        catch (Exception) { error = "Subscription settings could not be loaded."; }
+        ready = true;
+        StateHasChanged();
+    }
+    private async Task LoadAsync()
+    {
+        try { busy = true; error = notice = ""; settings = await AdminService.GetSubscriptionManagementAsync(); }
+        catch (AccountApiException ex) { error = ex.Message; }
+        catch (Exception) { error = "Subscription settings could not be loaded. Please try again."; }
+        finally { busy = false; }
+    }
+    private async Task SaveAsync()
+    {
+        if (settings is null) return;
+        try
+        {
+            busy = true; error = notice = "";
+            settings = await AdminService.SaveSubscriptionManagementAsync(settings);
+            notice = "Subscription settings saved. Stripe and Google Play prices have not been changed.";
+        }
+        catch (AccountApiException ex) { error = ex.Message; }
+        catch (Exception) { error = "Subscription settings could not be saved. Reload before trying again."; }
+        finally { busy = false; }
+    }
+}

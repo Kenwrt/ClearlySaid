@@ -9,6 +9,7 @@ public interface IAccountService
     event EventHandler? AccountChanged;
     event EventHandler? LoginSucceeded;
     Task InitializeAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<SubscriptionPlan>> GetSubscriptionPlansAsync(CancellationToken cancellationToken = default);
     Task LoginAsync(string email, string password, CancellationToken cancellationToken = default);
     Task<string> RegisterAsync(string email, string password, CancellationToken cancellationToken = default);
     Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken = default);
@@ -71,6 +72,8 @@ public sealed class UnavailableBillingService : IBillingService
 
 public interface IAdminService
 {
+    Task<SubscriptionManagement> GetSubscriptionManagementAsync(CancellationToken cancellationToken = default);
+    Task<SubscriptionManagement> SaveSubscriptionManagementAsync(SubscriptionManagement settings, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AdminUser>> GetUsersAsync(CancellationToken cancellationToken = default);
     Task<AdminUser> CreateUserAsync(CreateAdminUserRequest request, CancellationToken cancellationToken = default);
     Task<AdminUser> UpdateUserAsync(Guid userId, UpdateAdminUserRequest request, CancellationToken cancellationToken = default);

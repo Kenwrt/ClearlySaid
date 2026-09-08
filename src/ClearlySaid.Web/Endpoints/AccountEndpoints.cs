@@ -357,8 +357,13 @@ public static class AccountEndpoints
         }
     }
 
-    private static IResult GetSubscriptionPlans() => Results.Ok(
-        SubscriptionPlans.All.Where(plan => !plan.IsInternal));
+    private static async Task<IResult> GetSubscriptionPlans(ClearlySaidDatabase database, CancellationToken cancellationToken)
+    {
+        var settings = await database.GetSubscriptionManagementAsync(cancellationToken);
+        return Results.Ok(settings.Plans.Select(plan => plan.Id == SubscriptionPlans.Free
+            ? plan.ToPublicPlan() with { Description = $"Free for {settings.FreeTrialDays} days, with no refinement limit." }
+            : plan.ToPublicPlan()));
+    }
 
     public static async Task<AuthenticatedUser?> AuthenticateAsync(
         HttpRequest request,

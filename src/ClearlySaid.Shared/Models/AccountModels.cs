@@ -43,10 +43,13 @@ public sealed record AccountInfo(
     string SmsConsentStatus = SmsConsentStatuses.NotProvided,
     DateTimeOffset? SmsConsentedAt = null,
     DateTimeOffset? SmsTransactionalConsentAt = null,
-    DateTimeOffset? SmsMarketingConsentAt = null)
+    DateTimeOffset? SmsMarketingConsentAt = null,
+    DateTimeOffset? FreeTrialEndsAt = null)
 {
     public bool IsUnlimited => Role == AccountRoles.Admin;
-    public int Remaining => Math.Max(0, MonthlyAllowance - UsedThisPeriod);
+    public bool IsTrialExpired => !IsUnlimited && Plan == SubscriptionPlans.Free && FreeTrialEndsAt <= DateTimeOffset.UtcNow;
+    // Compatibility field for older clients; refinement counts no longer control access.
+    public int Remaining => IsTrialExpired ? 0 : int.MaxValue;
 }
 
 public static class SmsConsentStatuses
@@ -82,14 +85,14 @@ public static class SubscriptionPlans
     public const string Pro = "pro";
 
     public static readonly SubscriptionPlan FreePlan = new(
-        Free, "Free", 20, false, false, "Try ClearlySaid with a small monthly allowance.", 0m, 0m, null);
+        Free, "Free", int.MaxValue, false, false, "Try ClearlySaid with a limited free trial.", 0m, 0m, null);
     public static readonly SubscriptionPlan DevelopmentPlan = new(
-        Development, "Development", 10_000, false, true, "Internal testing and development access.", 0m, 0m, null);
+        Development, "Development", int.MaxValue, false, true, "Internal testing and development access.", 0m, 0m, null);
     public static readonly SubscriptionPlan StandardPlan = new(
-        Standard, "Standard", 300, true, false, "A practical baseline subscription for regular use.", 2.49m, 24.99m,
+        Standard, "Standard", int.MaxValue, true, false, "Standard subscription access with no refinement limit.", 1.99m, 24.99m,
         "clearlysaid_standard");
     public static readonly SubscriptionPlan ProPlan = new(
-        Pro, "Pro", 1_000, true, false, "Higher-volume access for frequent use.", 4.99m, 49.99m,
+        Pro, "Pro", int.MaxValue, true, false, "Pro subscription access with no refinement limit.", 2.49m, 49.99m,
         "clearlysaid_pro");
 
     public static IReadOnlyList<SubscriptionPlan> All { get; } =

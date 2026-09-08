@@ -287,8 +287,8 @@ app.MapPost("/api/messages/refine", async (
         if (reservation.UsageId is null)
         {
             return Results.Problem(
-                "You have reached your monthly message allowance.",
-                statusCode: StatusCodes.Status429TooManyRequests);
+                "Your free trial has ended or your subscription is inactive. Refresh your account to view your plan and upgrade options.",
+                statusCode: StatusCodes.Status403Forbidden);
         }
 
         await database.RecordRefinementDiagnosticAsync(

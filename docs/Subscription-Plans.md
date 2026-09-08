@@ -1,15 +1,33 @@
 # ClearlySaid subscription plans
 
-ClearlySaid owns plan definitions on the server. Clients and administrators select a plan identifier; they cannot supply an arbitrary monthly allowance.
+ClearlySaid owns plan definitions on the server. Administrators manage fixed fees, names, offered status, Stripe price mappings, and free-trial duration at `/admin/subscriptions`, linked from Admin Tools. Fees are not calculated from refinement counts, and no plan has a refinement-count limit. Ordinary clients cannot set entitlements. The persisted catalog is authoritative; the values below are initial defaults.
 
-| Plan | Monthly refinements | Web monthly | Web annual | Assignment | Purpose |
+| Plan | Refinement limit | Web monthly | Web annual | Assignment | Purpose |
 | --- | ---: | ---: | ---: | --- | --- |
-| Free | 20 | $0 | $0 | New accounts and administrators | Trial and occasional use |
-| Development | 10,000 | Not sold | Not sold | Administrators only | Internal development and testing |
-| Standard | 300 | $2.49 | $24.99 | Administrator or verified purchase | Baseline paid subscription |
-| Pro | 1,000 | $4.99 | $49.99 | Administrator or verified purchase | Frequent use |
+| Free | None during trial | $0 | $0 | New accounts and administrators | 10-day trial |
+| Development | None | Not sold | Not sold | Administrators only | Internal development and testing |
+| Standard | None | $1.99 | $24.99 | Administrator or verified purchase | Standard subscription |
+| Pro | None | $2.49 | $49.99 | Administrator or verified purchase | Pro subscription |
 
-The Admin role is unlimited and always bypasses the monthly subscription quota. It still observes technical safeguards such as the 5,000-character request limit, one active refinement at a time, rate limiting, authentication, and abuse protection.
+## Subscription management and trials
+
+The free trial starts on the first authenticated account access after this feature is installed. This gives existing accounts a full trial rather than backdating it to registration. Its start and end are stored once per account. Updating the trial duration affects trials that have not started; it does not restart or shorten existing trials. Trial expiry is enforced on the server independently of refinement counts. After expiry, the user can still sign in, manage their account, and buy a plan. There is no automatic charge or automatic enrollment into Standard.
+
+All refinement-count caps have been removed, including Free, Standard, Pro, and Development. Usage events remain for diagnostics, activity reporting, and duplicate-request prevention, but are not counted to permit or deny requests. Legacy allowance fields remain for compatibility and are not enforced. Annual prices are intentionally unchanged and are separately editable; their current defaults exceed twelve payments at the new monthly rates. The management page flags that condition.
+
+Saving requires current Administrator authorization and records the actor, UTC timestamp, and previous/new settings in an append-oriented audit table within the same database transaction. A revision check prevents overwriting another administrator's edits. Existing subscriptions are not canceled when a plan is no longer offered. The internal Development plan and Administrator role are retained.
+
+The schema additions are in `ClearlySaidDatabase.Subscriptions.cs` and run with the application's existing initialization mechanism. Editing this source does not apply them to a running/shared database; deploying this feature requires the normal explicit database/deployment authorization.
+
+## Updating payment providers
+
+Saving the application catalog does not mutate Stripe or Google Play. Stripe price IDs are seeded from the existing protected configuration only when the catalog is first created. Use new Stripe recurring prices for changed amounts and save the corresponding IDs in Admin Tools. Checkout retrieves the selected Stripe price and rejects inactive prices or mismatches in USD amount, interval, interval count, or billing scheme. Taxes and promotions can still affect the final checkout total. Prior Stripe price mappings are retained so existing subscribers' webhooks continue to resolve to the correct plan. No existing subscription is migrated by saving settings.
+
+For Google Play, edit the relevant base-plan prices separately in Play Console. Existing subscribers retain legacy pricing unless explicitly migrated. Android reads the application catalog for names and availability, and the Google Play purchase sheet displays the actual local price. A new Android release is needed to distribute this catalog/trial UI change; subsequent fee-only changes to existing Play products normally do not require another binary. The application free trial is separate from a Google Play subscription offer and never automatically starts a paid subscription.
+
+Application deployment does not update payment-provider prices or publish a Google Play release. Those operations are tracked separately.
+
+All plans retain technical safeguards: the 5,000-character request limit, one active refinement at a time, rate limiting, authentication, and abuse protection. Administrator access continues to bypass trial expiry. Paid styling permissions remain unchanged.
 
 ## Paid message styling
 
