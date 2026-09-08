@@ -46,8 +46,8 @@ public sealed class GooglePlayBillingService : IBillingService, IDisposable
     {
         var account = apiClient.CurrentAccount
             ?? throw new AccountApiException("Sign in before purchasing a ClearlySaid subscription.");
-        var definition = SubscriptionPlans.GetRequired(plan);
-        if (!definition.IsPurchasable || string.IsNullOrWhiteSpace(definition.GooglePlayProductId))
+        var definition = (await apiClient.GetSubscriptionPlansAsync(cancellationToken)).FirstOrDefault(p => p.Id == plan);
+        if (definition is null || !definition.IsPurchasable || string.IsNullOrWhiteSpace(definition.GooglePlayProductId))
         {
             throw new AccountApiException("Select a ClearlySaid subscription that is available for purchase.");
         }

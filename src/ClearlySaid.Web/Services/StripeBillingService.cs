@@ -19,7 +19,9 @@ public sealed class StripeBillingService(
         StripeCheckoutRequest request,
         CancellationToken cancellationToken)
     {
-        var plan = SubscriptionPlans.Find(request.Plan);
+        var settings = await database.GetSubscriptionManagementAsync(cancellationToken);
+        var fee = settings.Plans.FirstOrDefault(p => p.Id == request.Plan);
+        var plan = fee?.ToPublicPlan();
         if (plan is null || !plan.IsPurchasable)
         {
             throw new StripeBillingRequestException("Select a purchasable ClearlySaid plan.");
@@ -40,7 +42,15 @@ public sealed class StripeBillingService(
             throw new StripeBillingRequestException("Select monthly or annual billing.");
         }
 
-        var priceId = GetPriceId(plan.Id, interval);
+        var priceId = interval == BillingIntervals.Annual ? fee!.StripeAnnualPriceId : fee!.StripeMonthlyPriceId;
+        if (string.IsNullOrEmpty(priceId))
+            throw new StripeBillingConfigurationException("This plan is awaiting payment provider setup.");
+        var price = await new PriceService(CreateClient()).GetAsync(priceId, cancellationToken: cancellationToken);
+        var expectedAmount = (interval == BillingIntervals.Annual ? fee.AnnualPrice : fee.MonthlyPrice) * 100m;
+        if (!price.Active || price.Currency != "usd" || price.UnitAmount != expectedAmount ||
+            price.Recurring?.Interval != (interval == BillingIntervals.Annual ? "year" : "month") ||
+            price.Recurring.IntervalCount != 1 || price.BillingScheme != "per_unit" || price.Recurring.UsageType != "licensed")
+            throw new StripeBillingConfigurationException("This plan's payment provider price needs updating before checkout is available.");
         var customerId = await database.GetStripeCustomerReferenceAsync(user.Id, cancellationToken);
         var baseUrl = GetPublicBaseUrl();
         var metadata = new Dictionary<string, string>
@@ -189,7 +199,7 @@ public sealed class StripeBillingService(
             throw new StripeWebhookException("The Stripe subscription does not contain a recurring price.");
         }
 
-        var plan = FindPlanByPriceId(priceId)
+        var plan = await database.FindStripePricePlanAsync(priceId, cancellationToken)
             ?? throw new StripeWebhookException($"Stripe price '{priceId}' is not configured for ClearlySaid.");
         var userId = TryReadUserId(subscription.Metadata);
         if (userId is null && !string.IsNullOrWhiteSpace(subscription.CustomerId))
@@ -224,12 +234,6 @@ public sealed class StripeBillingService(
             cancellationToken);
     }
 
-    private SubscriptionPlan? FindPlanByPriceId(string priceId) =>
-        SubscriptionPlans.All.FirstOrDefault(plan =>
-            plan.IsPurchasable &&
-            (string.Equals(GetOptionalPriceId(plan.Id, BillingIntervals.Monthly), priceId, StringComparison.Ordinal) ||
-             string.Equals(GetOptionalPriceId(plan.Id, BillingIntervals.Annual), priceId, StringComparison.Ordinal)));
-
     private static Guid? TryReadUserId(IReadOnlyDictionary<string, string>? metadata) =>
         metadata is not null &&
         metadata.TryGetValue(UserMetadataKey, out var value) &&
@@ -238,19 +242,6 @@ public sealed class StripeBillingService(
             : null;
 
     private StripeClient CreateClient() => new(RequireConfiguration("Stripe:SecretKey"));
-
-    private string GetPriceId(string planId, string interval) =>
-        GetOptionalPriceId(planId, interval)
-        ?? throw new StripeBillingConfigurationException(
-            $"Stripe pricing for the ClearlySaid {planId} {interval} plan is not configured.");
-
-    private string? GetOptionalPriceId(string planId, string interval)
-    {
-        var planSegment = char.ToUpperInvariant(planId[0]) + planId[1..].ToLowerInvariant();
-        var intervalSegment = interval == BillingIntervals.Annual ? "Annual" : "Monthly";
-        var value = configuration[$"Stripe:Prices:{planSegment}{intervalSegment}"];
-        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    }
 
     private string GetPublicBaseUrl()
     {

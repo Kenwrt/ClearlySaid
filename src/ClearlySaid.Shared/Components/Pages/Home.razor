@@ -55,7 +55,11 @@
                     }
                     else
                     {
-                        <small>@currentAccount.Remaining of @currentAccount.MonthlyAllowance messages remaining</small>
+                        <small>No refinement limit</small>
+                        @if (currentAccount.Plan == SubscriptionPlans.Free && currentAccount.FreeTrialEndsAt is { } trialEnd)
+                        {
+                            <small>@(currentAccount.IsTrialExpired ? "Free trial ended" : $"Free trial ends {trialEnd.ToLocalTime():MMM d, yyyy}")</small>
+                        }
                     }
                     <a href="/account/profile">Profile</a>
                     @if (currentAccount.Role == AccountRoles.Admin)
@@ -80,7 +84,7 @@
     {
         <section class="cs-account" aria-labelledby="account-heading">
             <h2 id="account-heading">@(showRegistration ? "Create your account" : "Sign in")</h2>
-            <p>Your account protects the service and keeps track of your monthly allowance.</p>
+            <p>Your account protects your access and keeps track of your subscription.</p>
             <form @onsubmit="SubmitAccountAsync" @onsubmit:preventDefault>
                 <label for="account-email">Email</label>
                 <input id="account-email" type="email" autocomplete="email" @bind="email" />
@@ -134,7 +138,7 @@
             <div class="cs-billing-heading">
                 <div>
                     <h2 id="billing-heading">Plans and billing</h2>
-                    <p>Choose the allowance that fits how often you use ClearlySaid.</p>
+                    <p>Choose your subscription. All plans have no refinement-count limit.</p>
                 </div>
                 <div class="cs-billing-tools">
                     <button class="cs-link-button" type="button" disabled="@isBillingBusy" @onclick="RefreshPlanAsync">
@@ -167,12 +171,20 @@
 
             @if (account.Plan == SubscriptionPlans.Free)
             {
+                @if (account.FreeTrialEndsAt is { } endsAt)
+                {
+                    <p>@(account.IsTrialExpired ? "Your free trial has ended." : $"Free trial ends {endsAt.ToLocalTime():MMM d, yyyy}.") A paid plan requires a purchase; there is no automatic charge.</p>
+                }
+                @if (BillingService.CheckoutMode == BillingCheckoutMode.AppStore)
+                {
+                    <p>Google Play displays your local price and billing terms before you confirm a purchase.</p>
+                }
                 <div class="cs-plan-grid">
-                    @foreach (var plan in SubscriptionPlans.All.Where(candidate => candidate.IsPurchasable))
+                    @foreach (var plan in subscriptionPlans.Where(candidate => candidate.IsPurchasable))
                     {
                         <article class="cs-plan-card">
                             <h3>@plan.DisplayName</h3>
-                            <strong>@plan.MonthlyAllowance.ToString("N0") messages / month</strong>
+                            <strong>No refinement limit</strong>
                             <p>@plan.Description</p>
                             <div class="cs-plan-actions">
                                 <button class="cs-button cs-button-primary" type="button"
@@ -197,11 +209,11 @@
         </section>
     }
 
-    @if (AccountService.CurrentAccount is { IsUnlimited: false, Remaining: 0 })
+    @if (AccountService.CurrentAccount is { IsTrialExpired: true })
     {
         <section class="cs-limit-callout" role="status" aria-labelledby="limit-heading">
-            <h2 id="limit-heading">Your messages will reset soon</h2>
-            <p>You have used this month’s allowance. Choose a plan above for more message improvements, or return after your allowance resets.</p>
+            <h2 id="limit-heading">Choose a plan to continue</h2>
+            <p>Your free trial has ended. Choose a paid plan to continue. You will not be charged unless you complete a purchase.</p>
             <a class="cs-button cs-button-primary" href="#plans">Compare plans</a>
         </section>
     }
@@ -337,7 +349,7 @@
     private CancellationTokenSource? operationCancellation;
     private CancellationTokenSource? copyResetCancellation;
     private bool IsOutOfMessages => AccountService.CurrentAccount is
-        { IsUnlimited: false, Remaining: 0 };
+        { IsTrialExpired: true };
     private bool CanClear =>
         isListening || isBusy ||
         !string.IsNullOrWhiteSpace(message) ||
@@ -357,6 +369,8 @@
         AccountService.LoginSucceeded += OnLoginSucceeded;
     }
 
+    private IReadOnlyList<SubscriptionPlan> subscriptionPlans = [];
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender)
@@ -367,6 +381,7 @@
         try
         {
             await AccountService.InitializeAsync();
+            subscriptionPlans = await AccountService.GetSubscriptionPlansAsync();
             if (BillingService.IsAvailable)
             {
                 var query = Navigation.ToAbsoluteUri(Navigation.Uri).Query;
@@ -513,6 +528,7 @@
 
     private string CheckoutLabel(decimal price, string period) => BillingService.CheckoutMode switch
     {
+        BillingCheckoutMode.AppStore => $"View {period}ly price in Google Play",
         BillingCheckoutMode.ExternalWebsite => $"Continue on website · ${price:0.00}/{period}",
         BillingCheckoutMode.Unavailable => "Purchases coming soon",
         _ => $"${price:0.00}/{period}"
@@ -586,7 +602,7 @@
     {
         if (IsOutOfMessages)
         {
-            errorMessage = "You have reached this month’s message allowance. Choose a plan or wait for the allowance to reset.";
+            errorMessage = "Your free trial has ended. Choose a paid plan to continue.";
             return;
         }
 

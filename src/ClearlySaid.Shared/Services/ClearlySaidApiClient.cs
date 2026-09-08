@@ -16,6 +16,20 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
     public event EventHandler? AccountChanged;
     public event EventHandler? LoginSucceeded;
 
+    public async Task<IReadOnlyList<SubscriptionPlan>> GetSubscriptionPlansAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await httpClient.GetAsync("api/subscriptions/plans", cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<List<SubscriptionPlan>>(cancellationToken)
+            ?? throw new AccountApiException("Subscription plans are unavailable. Please try again.");
+    }
+
+    public Task<SubscriptionManagement> GetSubscriptionManagementAsync(CancellationToken cancellationToken = default) =>
+        SendAdminAsync<SubscriptionManagement>(HttpMethod.Get, "api/admin/subscriptions", null, cancellationToken);
+
+    public Task<SubscriptionManagement> SaveSubscriptionManagementAsync(SubscriptionManagement settings, CancellationToken cancellationToken = default) =>
+        SendAdminAsync<SubscriptionManagement>(HttpMethod.Put, "api/admin/subscriptions", settings, cancellationToken);
+
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         if (IsInitialized)

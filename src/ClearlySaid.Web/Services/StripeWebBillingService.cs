@@ -19,16 +19,12 @@ public sealed class StripeWebBillingService(
         IsAvailable ? BillingCheckoutMode.Stripe : BillingCheckoutMode.Unavailable;
     public string? AvailabilityMessage => IsAvailable
         ? null
-        : "Online subscriptions are coming soon. You can keep using the Free plan in the meantime.";
+        : "Online subscriptions are not available yet. Free access lasts until your trial ends.";
 
     private static readonly string[] RequiredSettings =
     [
         "Stripe:SecretKey",
-        "Stripe:WebhookSecret",
-        "Stripe:Prices:StandardMonthly",
-        "Stripe:Prices:StandardAnnual",
-        "Stripe:Prices:ProMonthly",
-        "Stripe:Prices:ProAnnual"
+        "Stripe:WebhookSecret"
     ];
 
     public Task StartCheckoutAsync(

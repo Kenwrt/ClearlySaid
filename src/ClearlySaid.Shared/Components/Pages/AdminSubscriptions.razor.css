@@ -1,0 +1,7 @@
+.fees-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; text-align: left; }
+th, td { padding: .75rem; border-bottom: 1px solid #374151; }
+input:not([type=checkbox]) { width: 100%; min-width: 6rem; padding: .65rem; }
+label { display: block; max-width: 28rem; margin: .75rem 0; }
+fieldset { margin: 1rem 0; border: 1px solid #374151; border-radius: .75rem; }
+.fee-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1rem 0; }

@@ -31,7 +31,7 @@
                 <h2>Invite user</h2>
                 <label>Email<input type="email" @bind="createEmail" /></label>
                 <label>Role<select @bind="createRole"><option value="User">User</option><option value="Admin">Admin</option></select></label>
-                <label>Subscription plan<select @bind="createPlan">@foreach (var plan in SubscriptionPlans.All) { <option value="@plan.Id">@plan.DisplayName (@plan.MonthlyAllowance.ToString("N0") / month)</option> }</select></label>
+                <label>Subscription plan<select @bind="createPlan">@foreach (var plan in availablePlans) { <option value="@plan.Id">@plan.DisplayName</option> }</select></label>
                 <p class="cs-admin-hint">The user will receive a secure, time-limited invitation to verify their email and choose their own password. Administrators are unlimited regardless of their selected plan.</p>
                 <button class="cs-button cs-button-primary" disabled="@busy" @onclick="CreateAsync">Send invitation email</button>
             </div>
@@ -44,8 +44,8 @@
                         <p class="cs-admin-section-copy">Change the user’s email, access role, plan, or account status. This does not change their password.</p>
                         <label>Email<input type="email" @bind="editEmail" /></label>
                         <label>Role<select @bind="editRole"><option value="User">User</option><option value="Admin">Admin</option></select></label>
-                        <label>Subscription plan<select @bind="editPlan">@foreach (var plan in SubscriptionPlans.All) { <option value="@plan.Id">@plan.DisplayName (@plan.MonthlyAllowance.ToString("N0") / month)</option> }</select></label>
-                        <p class="cs-admin-hint">Effective allowance: @(editRole == AccountRoles.Admin ? "Unlimited" : SubscriptionPlans.GetRequired(editPlan).MonthlyAllowance.ToString("N0"))</p>
+                        <label>Subscription plan<select @bind="editPlan">@foreach (var plan in availablePlans) { <option value="@plan.Id">@plan.DisplayName</option> }</select></label>
+                        <p class="cs-admin-hint">No refinement-count limit. Free access ends when the trial expires.</p>
                         <label class="cs-admin-check"><input type="checkbox" @bind="editDisabled" /> Disable account access</label>
                         <button class="cs-button cs-button-primary" disabled="@busy" @onclick="SaveAsync">Save account details</button>
                     </div>
@@ -76,6 +76,7 @@
 
 @code {
     private IReadOnlyList<AdminUser> users = [];
+    private IReadOnlyList<SubscriptionPlan> availablePlans = [];
     private bool ready, busy, editDisabled, confirmDelete;
     private string error = "", notice = "", createEmail = "", createRole = AccountRoles.User, createPlan = SubscriptionPlans.Free;
     private Guid? selectedId;
@@ -89,17 +90,21 @@
         ready = true; StateHasChanged();
     }
 
-    private async Task LoadAsync() => await RunAsync(async () => users = await AdminService.GetUsersAsync(), "");
+    private async Task LoadAsync() => await RunAsync(async () =>
+    {
+        availablePlans = (await AccountService.GetSubscriptionPlansAsync()).Concat([SubscriptionPlans.DevelopmentPlan]).ToArray();
+        users = await AdminService.GetUsersAsync();
+    }, "");
     private void Select(AdminUser user) { selectedId=user.Id; editEmail=user.Email; editRole=user.Role; editPlan=SubscriptionPlans.Find(user.Plan)?.Id ?? SubscriptionPlans.Free; editDisabled=user.IsDisabled; resetPassword=""; confirmDelete=false; error=notice=""; }
     private async Task CreateAsync() => await RunAsync(async () => { await AdminService.CreateUserAsync(new(createEmail, createRole, createPlan)); createEmail=""; users=await AdminService.GetUsersAsync(); }, "Invitation email sent.");
     private async Task SaveAsync() { if (selectedId is null) return; await RunAsync(async () => { await AdminService.UpdateUserAsync(selectedId.Value, new(editEmail, editRole, editPlan, editDisabled)); users=await AdminService.GetUsersAsync(); }, "User updated."); }
     private async Task ResetPasswordAsync() { if (selectedId is null) return; await RunAsync(async () => { await AdminService.ResetPasswordAsync(selectedId.Value, resetPassword); resetPassword=""; }, "Password reset; existing sessions were revoked."); }
     private async Task DeleteAsync() { if (selectedId is null) return; await RunAsync(async () => { await AdminService.DeleteUserAsync(selectedId.Value); selectedId=null; users=await AdminService.GetUsersAsync(); }, "User permanently deleted and anonymized."); }
     private async Task RunAsync(Func<Task> action, string success) { try { busy=true; error=notice=""; await action(); notice=success; } catch(Exception ex) { error=ex.Message; } finally { busy=false; } }
-    private static string PlanName(string plan) => SubscriptionPlans.Find(plan)?.DisplayName ?? plan;
+    private string PlanName(string plan) => availablePlans.FirstOrDefault(p => p.Id == plan)?.DisplayName ?? plan;
     private static string FormatTimestamp(DateTimeOffset? timestamp) =>
         timestamp?.ToUniversalTime().ToString("MMM d, yyyy h:mm tt 'UTC'") ?? "Never";
-    private static string UsageText(AdminUser user) => user.Role == AccountRoles.Admin ? $"{user.UsedThisPeriod:N0} / Unlimited" : $"{user.UsedThisPeriod:N0} / {user.MonthlyAllowance:N0}";
+    private static string UsageText(AdminUser user) => $"{user.UsedThisPeriod:N0} processed";
     private static string SubscriptionDetails(AdminUser user) => user.Role == AccountRoles.Admin
         ? "Role override · unlimited"
         : $"{user.SubscriptionStatus} · {user.SubscriptionProvider ?? "manual"} · through {user.PeriodEndsAt:d}";
