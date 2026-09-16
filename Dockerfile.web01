@@ -11,6 +11,7 @@ COPY src/ClearlySaid.Shared/ src/ClearlySaid.Shared/
 COPY src/ClearlySaid.Web/ src/ClearlySaid.Web/
 RUN dotnet publish src/ClearlySaid.Web/ClearlySaid.Web.csproj \
     --configuration Release \
+    --disable-build-servers -p:UseSharedCompilation=false \
     --no-restore \
     --output /app/publish
 
