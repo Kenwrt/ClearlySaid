@@ -192,15 +192,8 @@ public sealed class StripeBillingService(
         Subscription subscription,
         CancellationToken cancellationToken)
     {
-        var item = subscription.Items.Data.OrderByDescending(candidate => candidate.CurrentPeriodEnd).FirstOrDefault();
-        var priceId = item?.Price?.Id;
-        if (item is null || string.IsNullOrWhiteSpace(priceId))
-        {
-            throw new StripeWebhookException("The Stripe subscription does not contain a recurring price.");
-        }
-
-        var plan = await database.FindStripePricePlanAsync(priceId, cancellationToken)
-            ?? throw new StripeWebhookException($"Stripe price '{priceId}' is not configured for ClearlySaid.");
+        // This Stripe account serves multiple products. Establish ClearlySaid
+        // ownership before validating this application's recurring price mapping.
         var userId = TryReadUserId(subscription.Metadata);
         if (userId is null && !string.IsNullOrWhiteSpace(subscription.CustomerId))
         {
@@ -211,11 +204,27 @@ public sealed class StripeBillingService(
 
         if (userId is null)
         {
-            logger.LogWarning(
+            if (subscription.Metadata?.ContainsKey(UserMetadataKey) == true ||
+                subscription.Metadata?.ContainsKey(PlanMetadataKey) == true)
+            {
+                throw new StripeWebhookException("The ClearlySaid subscription is not linked to a valid ClearlySaid account.");
+            }
+
+            logger.LogInformation(
                 "Ignoring Stripe event {EventId} because its subscription is not linked to a ClearlySaid account.",
                 stripeEvent.Id);
             return;
         }
+
+        var item = subscription.Items.Data.OrderByDescending(candidate => candidate.CurrentPeriodEnd).FirstOrDefault();
+        var priceId = item?.Price?.Id;
+        if (item is null || string.IsNullOrWhiteSpace(priceId))
+        {
+            throw new StripeWebhookException("The Stripe subscription does not contain a recurring price.");
+        }
+
+        var plan = await database.FindStripePricePlanAsync(priceId, cancellationToken)
+            ?? throw new StripeWebhookException($"Stripe price '{priceId}' is not configured for ClearlySaid.");
 
         await database.ApplyBillingSubscriptionAsync(
             new BillingSubscriptionUpdate(
