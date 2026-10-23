@@ -1,0 +1,101 @@
+@using System.Globalization
+@using ClearlySaid.Shared.Models
+@inject ClearlySaid.Web.Data.ClearlySaidDatabase Database
+@inject ILogger<LandingPage> Logger
+
+<PageTitle>ClearlySaid | Say it naturally. Send it clearly.</PageTitle>
+<HeadContent>
+    <meta name="description" content="Turn spoken thoughts or rough drafts into clear messages. Explore ClearlySaid, compare monthly plans, and try it free." />
+</HeadContent>
+
+<div class="landing">
+    <nav class="navigation" aria-label="Main navigation">
+        <a class="wordmark" href="/">ClearlySaid<span aria-hidden="true">●</span></a>
+        <div><a href="#how-it-works">How it works</a><a href="#pricing">Plans</a><a href="/?view=signin">Sign in ↗</a></div>
+    </nav>
+    <main>
+        <section class="hero" aria-labelledby="landing-heading">
+            <div class="pitch">
+                <p class="eyebrow">A little clarity goes a long way</p>
+                <h1 id="landing-heading">Your thoughts.<br />Your voice.<br /><em>Clearly said.</em></h1>
+                <p class="intro">For the email you keep rewriting. The text you want to get right. Say what you mean, without getting stuck on the words.</p>
+                <div class="actions"><a class="primary" href="/?view=signup">@(settings is null ? "Create a free account" : $"Try it free for {settings.FreeTrialDays} days") ↗</a><a href="#how-it-works">See how it works ↓</a></div>
+                <p class="fine-print">No automatic upgrade. Choose a paid plan when you're ready.</p>
+            </div>
+            <figure class="product">
+                <div class="window-bar"><span>ClearlySaid</span><span>Sample product screen</span></div>
+                <div class="product-body">
+                    <p class="screen-heading">Say it naturally. Send it clearly.</p>
+                    <div class="examples" aria-label="Example messages">
+                        <button type="button" aria-pressed="@(!everyday)" @onclick="() => everyday = false">Work email</button>
+                        <button type="button" aria-pressed="@everyday" @onclick="() => everyday = true">Everyday text</button>
+                    </div>
+                    <div aria-live="polite">
+                        <div class="input-panel"><span class="label">Your words</span><p>@(everyday ? "i can't make dinner tonight, it's been a long day and i just need some downtime. maybe this weekend instead?" : "hey just checking on that proposal, we really need it by friday so we can figure out next steps. let me know?")</p><span class="screen-note">◉ Speak or type your thoughts</span></div>
+                        <div class="settings"><span>Purpose · @(everyday ? "Text" : "Email")</span><span>Tone · Friendly</span><span>Directness · Balanced</span></div>
+                        <div class="refine-label"><span>Make it Clear</span><span aria-hidden="true">✦</span></div>
+                        <div class="output-panel"><span class="label">Your message, refined</span><p>@(everyday ? "I'm sorry, but I need to take tonight to recharge. Could we move dinner to this weekend? I'd love to catch up then." : "Hi, could you send the proposal by Friday? We'd like to review it and plan our next steps. Thanks for your help!")</p><span class="screen-note">✓ Ready to review and copy</span></div>
+                    </div>
+                </div>
+                <figcaption>Illustrative interface · Paid styling controls shown</figcaption>
+            </figure>
+        </section>
+        <div class="reasons"><span>Less second-guessing.</span><span>More getting your point across.</span><span>Still your message.</span></div>
+        <section id="how-it-works" class="how">
+            <div><p class="eyebrow">From thought to ready-to-send</p><h2>Find the words.<br />Keep the meaning.</h2></div>
+            <div class="steps">
+                <article><span>01</span><h3>Get your thoughts out</h3><p>Speak naturally or type a rough draft. It doesn't have to sound polished.</p></article>
+                <article><span>02</span><h3>Make it clearer</h3><p>Refine your message. Paid plans add purpose, tone, and directness controls.</p></article>
+                <article><span>03</span><h3>Make it yours</h3><p>Review the rewrite, copy it, and send it wherever your conversation happens.</p></article>
+            </div>
+        </section>
+        <section id="pricing" class="pricing" aria-labelledby="pricing-heading">
+            <div class="section-title"><p class="eyebrow">Simple monthly plans</p><h2 id="pricing-heading">Start with a little clarity.</h2><p>No refinement-count limits. No pay-per-message fees.</p></div>
+            @if (settings is not null)
+            {
+                <div class="plans">
+                    @foreach (var plan in settings.Plans.Where(p => p.Offered))
+                    {
+                        var free = plan.Id == SubscriptionPlans.Free;
+                        <article class="plan @(plan.Id == SubscriptionPlans.Standard ? "featured" : "")">
+                            <h3>@plan.Name</h3>
+                            <div class="price">@(free ? "$0" : plan.MonthlyPrice.ToString("C2", CultureInfo.GetCultureInfo("en-US")))<span> / @(free ? $"{settings.FreeTrialDays} days" : "month")</span></div>
+                            <p>@(free ? "Space to try a clearer way to write." : "Keep clear communication in your day.")</p>
+                            <ul>
+                                <li>@(free ? $"{settings.FreeTrialDays}-day free trial" : "Ongoing subscription access")</li>
+                                <li>No refinement-count limit</li>
+                                <li>@(free ? "Speak or type your message" : "Purpose and tone controls")</li>
+                                <li>@(free ? "Review and copy your rewrite" : "Adjust message directness")</li>
+                            </ul>
+                            <a class="@(plan.Id == SubscriptionPlans.Standard ? "primary" : "secondary")" href="/?view=signup">@(free ? "Start free" : "Sign up") →<span class="sr-only"> for @plan.Name</span></a>
+                        </article>
+                    }
+                </div>
+                <p class="pricing-note">Prices in USD. Paid plans renew monthly until canceled. Free access ends after @settings.FreeTrialDays days unless you choose a paid plan. Create an account first, then choose your subscription.</p>
+            }
+            else
+            {
+                <p role="status">Plan details are temporarily unavailable. Please try again later.</p>
+            }
+        </section>
+        <section class="closing"><h2>A clearer message starts here.</h2><div><a class="primary" href="/?view=signup">Create a free account ↗</a><a href="#how-it-works">Just exploring? Keep browsing.</a></div></section>
+    </main>
+    <div class="brand-footer"><span class="wordmark">ClearlySaid<span aria-hidden="true">●</span></span><span>Say it naturally. Send it clearly.</span></div>
+</div>
+
+@code {
+    private SubscriptionManagement? settings;
+    private bool everyday;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            settings = await Database.GetSubscriptionManagementAsync(CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning("Landing page plan catalog unavailable: {ErrorType}", exception.GetType().Name);
+        }
+    }
+}

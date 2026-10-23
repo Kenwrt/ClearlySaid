@@ -35,7 +35,17 @@
     </div>
 }
 
+@if (LandingPageType is not null && AccountService.CurrentAccount is null && View is not ("signup" or "signin"))
+{
+    <DynamicComponent Type="LandingPageType" />
+}
+else
+{
 <main class="cs-page">
+    @if (LandingPageType is not null && AccountService.CurrentAccount is null)
+    {
+        <a href="/">← About ClearlySaid</a>
+    }
     <header class="cs-brand">
         <div>
             <h1>ClearlySaid</h1>
@@ -323,8 +333,17 @@
         <p class="cs-error" role="alert">@errorMessage</p>
     }
 </main>
+}
 
 @code {
+    [CascadingParameter(Name = "LandingPageType")] public Type? LandingPageType { get; set; }
+    [SupplyParameterFromQuery(Name = "view")] public string? View { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        showRegistration = View == "signup";
+    }
+
     private string message = string.Empty;
     private string result = string.Empty;
     private string errorMessage = string.Empty;
