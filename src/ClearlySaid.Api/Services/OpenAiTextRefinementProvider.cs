@@ -39,7 +39,7 @@ public sealed class OpenAiTextRefinementProvider(
             input = text.Trim(),
             reasoning = new { effort = "none" },
             text = new { verbosity = "low" },
-            max_output_tokens = 300
+            max_output_tokens = 2048
         });
 
         HttpResponseMessage response;
@@ -71,6 +71,13 @@ public sealed class OpenAiTextRefinementProvider(
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            if (document.RootElement.TryGetProperty("status", out var status) &&
+                status.ValueEquals("incomplete"))
+            {
+                throw new OpenAiServiceException(
+                    "ClearlySaid couldn't finish the rewrite. Your original is still available to edit. Try sending it in smaller sections.");
+            }
+
             var output = ExtractOutputText(document.RootElement);
             if (string.IsNullOrWhiteSpace(output))
             {

@@ -36,7 +36,7 @@ Ollama__TimeoutSeconds=25
 Ollama__PreflightTimeoutMilliseconds=1500
 Ollama__CircuitBreakSeconds=30
 Ollama__KeepAlive=-1
-Ollama__MaximumOutputTokens=128
+Ollama__MaximumOutputTokens=2048
 Routing__OpenAiFallbackEnabled=true
 ```
 
@@ -47,6 +47,8 @@ Before submitting message text, API01 performs a short Ollama availability check
 definite preflight failure opens a temporary circuit and routes eligible requests to
 OpenAI. Timeouts after message submission remain ambiguous and do not automatically
 retry through another provider, which prevents duplicate processing.
+Rewrites that reach Ollama's output limit return an error instead of a partial message
+and stay on the local provider.
 
 Use mode `600` on the file. Enter the OpenAI key using hidden terminal input so it isn't stored in shell history.
 

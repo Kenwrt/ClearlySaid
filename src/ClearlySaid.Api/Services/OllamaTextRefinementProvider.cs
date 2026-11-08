@@ -14,7 +14,7 @@ public sealed class OllamaTextRefinementProvider(
     public string Name => "ollama";
     public string Model => configuration["Ollama:Model"] ?? "qwen3-vl:4b-instruct";
     private int KeepAlive => configuration.GetValue("Ollama:KeepAlive", -1);
-    private int MaximumOutputTokens => configuration.GetValue("Ollama:MaximumOutputTokens", 128);
+    private int MaximumOutputTokens => configuration.GetValue("Ollama:MaximumOutputTokens", 2048);
 
     public async Task<TextRefinementResult> RefineAsync(
         string text,
@@ -95,6 +95,16 @@ public sealed class OllamaTextRefinementProvider(
             {
                 await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
                 using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+                LogTimingDetails(document.RootElement, requestId);
+
+                if (document.RootElement.TryGetProperty("done_reason", out var doneReason) &&
+                    doneReason.ValueEquals("length"))
+                {
+                    // Keep this message local when Ollama reaches its output limit.
+                    throw new TextRefinementProviderException(
+                        "ClearlySaid couldn't finish the rewrite. Your original is still available to edit. Try sending it in smaller sections.");
+                }
+
                 var output = document.RootElement.TryGetProperty("response", out var value)
                     ? value.GetString()?.Trim()
                     : null;
@@ -102,8 +112,6 @@ public sealed class OllamaTextRefinementProvider(
                 {
                     throw new DefiniteProviderFailureException("Ollama returned an empty response.");
                 }
-
-                LogTimingDetails(document.RootElement, requestId);
 
                 return new TextRefinementResult(
                     RefinementPrompt.NormalizeOutput(output),
