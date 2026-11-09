@@ -6,7 +6,10 @@ using ClearlySaid.Shared.Models;
 
 namespace ClearlySaid.Shared.Services;
 
-public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStore tokenStore) :
+public sealed class ClearlySaidApiClient(
+    HttpClient httpClient,
+    IAccessTokenStore tokenStore,
+    HttpClient? refinementClient = null) :
     IAccountService,
     IMessageRefinementService,
     IAdminService
@@ -228,7 +231,7 @@ public sealed class ClearlySaidApiClient(HttpClient httpClient, IAccessTokenStor
 
         using var request = CreateAuthorizedRequest(HttpMethod.Post, "api/messages/refine", token);
         request.Content = JsonContent.Create(new RefineMessageRequest(message, Guid.NewGuid(), Style: style));
-        using var response = await httpClient.SendAsync(request, cancellationToken);
+        using var response = await (refinementClient ?? httpClient).SendAsync(request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
 
         var result = await response.Content.ReadFromJsonAsync<RefineMessageResponse>(cancellationToken);

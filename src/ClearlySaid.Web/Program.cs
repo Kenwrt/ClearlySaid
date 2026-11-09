@@ -31,7 +31,7 @@ builder.Services.AddDataProtection()
 builder.Services.AddHttpClient("Api01", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Api01:BaseUrl"] ?? "https://api01/");
-    client.Timeout = TimeSpan.FromSeconds(30);
+    client.Timeout = TimeSpan.FromSeconds(70);
 });
 
 builder.Services.AddSingleton<IPasswordHasher<UserCredential>, PasswordHasher<UserCredential>>();
@@ -64,7 +64,8 @@ else
 builder.Services.AddScoped<IAccessTokenStore, BrowserAccessTokenStore>();
 builder.Services.AddScoped<ClearlySaidApiClient>(services => new ClearlySaidApiClient(
     services.GetRequiredService<IHttpClientFactory>().CreateClient("Public"),
-    services.GetRequiredService<IAccessTokenStore>()));
+    services.GetRequiredService<IAccessTokenStore>(),
+    services.GetRequiredService<IHttpClientFactory>().CreateClient("PublicRefinement")));
 builder.Services.AddScoped<IAccountService>(services => services.GetRequiredService<ClearlySaidApiClient>());
 builder.Services.AddScoped<IMessageRefinementService>(services => services.GetRequiredService<ClearlySaidApiClient>());
 builder.Services.AddScoped<IAdminService>(services => services.GetRequiredService<ClearlySaidApiClient>());
@@ -74,13 +75,19 @@ builder.Services.AddScoped<Api01MessageRefinementService>();
 builder.Services.AddSingleton<ActiveRefinementRequests>();
 builder.Services.AddHostedService<DiagnosticRetentionService>();
 builder.Services.AddScoped<IDictationService, BrowserDictationService>();
+var publicBaseAddress = new Uri(
+    builder.Configuration["InternalBaseUrl"] ??
+    builder.Configuration["PublicBaseUrl"] ??
+    "https://clearlysaid.ai/");
 builder.Services.AddHttpClient("Public", client =>
 {
-    client.BaseAddress = new Uri(
-        builder.Configuration["InternalBaseUrl"] ??
-        builder.Configuration["PublicBaseUrl"] ??
-        "https://clearlysaid.ai/");
+    client.BaseAddress = publicBaseAddress;
     client.Timeout = TimeSpan.FromSeconds(35);
+});
+builder.Services.AddHttpClient("PublicRefinement", client =>
+{
+    client.BaseAddress = publicBaseAddress;
+    client.Timeout = TimeSpan.FromSeconds(80);
 });
 builder.Services.AddHttpClient("Resend", client =>
 {

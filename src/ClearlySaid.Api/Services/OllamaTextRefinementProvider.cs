@@ -60,6 +60,10 @@ public sealed class OllamaTextRefinementProvider(
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {
+            logger.LogWarning(
+                "Ollama rewrite timed out for request {RequestId} after {ElapsedMilliseconds} ms.",
+                requestId,
+                stopwatch.ElapsedMilliseconds);
             throw new AmbiguousProviderFailureException(
                 "The primary provider timed out; the request was not sent to a second provider to avoid duplicate processing.",
                 exception);
