@@ -32,7 +32,7 @@ CLEARLYSAID_INTERNAL_API_TOKEN=<shared-random-token>
 OPENAI_API_KEY=<openai-api-key>
 Ollama__BaseUrl=http://10.168.168.5:11434/
 Ollama__Model=qwen3-vl:4b-instruct
-Ollama__TimeoutSeconds=25
+Ollama__TimeoutSeconds=60
 Ollama__PreflightTimeoutMilliseconds=1500
 Ollama__CircuitBreakSeconds=30
 Ollama__KeepAlive=-1
@@ -42,6 +42,9 @@ Routing__OpenAiFallbackEnabled=true
 
 `Ollama__KeepAlive=-1` keeps the model resident in GPU memory. API01 also warms the
 model during application startup so the first user request does not pay the model-load cost.
+GPU memory pressure can still evict a resident model. The 60-second generation
+budget allows time for a cold reload and generation. Web01 allows 70 seconds for
+the API01 call and 80 seconds for the browser's server-side rewrite request.
 
 Before submitting message text, API01 performs a short Ollama availability check. A
 definite preflight failure opens a temporary circuit and routes eligible requests to
