@@ -16,7 +16,7 @@ builder.Services.AddHttpClient("OpenAI", client =>
 builder.Services.AddHttpClient("Ollama", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Ollama:BaseUrl"] ?? "http://10.168.168.5:11434/");
-    client.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Ollama:TimeoutSeconds", 25));
+    client.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Ollama:TimeoutSeconds", 60));
 });
 builder.Services.AddScoped<OllamaTextRefinementProvider>();
 builder.Services.AddScoped<OpenAiTextRefinementProvider>();
