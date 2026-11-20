@@ -633,7 +633,8 @@ else
 
         operationCancellation?.Cancel();
         operationCancellation?.Dispose();
-        var requestCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        // The HTTP client owns the refinement deadline. This token handles UI cancellation.
+        var requestCancellation = new CancellationTokenSource();
         operationCancellation = requestCancellation;
 
         try
